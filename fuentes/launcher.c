@@ -259,7 +259,7 @@ static void frameBox(HDC dc, RECT rect, COLORREF color) {
 }
 static HFONT makeFont(int size, int weight) {
     return CreateFontW(-px(size), 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 }
 static void paintWindow(HDC dc) {
     RECT client; GetClientRect(window, &client); fillBox(dc, client, UI_BACKGROUND);
@@ -302,6 +302,7 @@ static void drawButton(const DRAWITEMSTRUCT *item) {
     SelectObject(item->hDC, old);
 }
 static HWND control(const WCHAR *className, const WCHAR *text, DWORD style, int x, int y, int width, int height, int id) {
+    if (wcscmp(className, L"STATIC") == 0) style |= SS_NOPREFIX;
     if (wcscmp(className, L"BUTTON") == 0) style = (style & ~BS_TYPEMASK) | BS_OWNERDRAW;
     if (wcscmp(className, L"EDIT") == 0 && id != IDC_REPORT) style |= WS_BORDER;
     HWND item = CreateWindowExW(0, className, text, WS_CHILD | WS_VISIBLE | style,

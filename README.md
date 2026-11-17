@@ -43,6 +43,4 @@ Indica la versión del conversor, qué estabas haciendo y el mensaje exacto en [
 
 ## Desarrollo
 
-La próxima versión 1.4.0 se está preparando: salida junto al original y diagnóstico guardado solo a petición. Todavía no está publicada en Releases. Las instrucciones anteriores corresponden a la versión 1.4.0 disponible para descargar.
-
 El código de la interfaz está en `fuentes/launcher.c` y el motor en `app/converter.py`. Para ejecutar desde los fuentes, compilar o colaborar, consulta la [guía de desarrollo](docs/DESARROLLO.md). Las notas técnicas de validación de la versión 1.3 están en `fuentes/VALIDACION.txt`.
