@@ -1,99 +1,46 @@
 # Conversor CE3X 3.2 a CE3X 2.3
 
-Código fuente del conversor experimental de archivos `.cex` residenciales de CE3X 3.2 al formato observado de CE3X 2.3. Versión actual: **1.3.0**.
+Conversor experimental de archivos `.cex` residenciales de CE3X 3.2 a CE3X 2.3 para Windows 10/11 de 64 bits.
 
-## Descargar y usar en Windows
+## Descargar
 
-[**Descargar Conversor_CE3X_Windows_1_3.zip**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/latest/download/Conversor_CE3X_Windows_1_3.zip)
+[**Descargar para Windows, versión 1.3.0**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/download/v1.3.0/Conversor_CE3X_Windows_1_3.zip)
 
-El paquete portátil para Windows 10/11 de 64 bits incluye Python y el ejecutable, sin instalación adicional. Encontrarás las versiones publicadas en [Releases](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases).
+[Releases y notas de cada versión](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases) · [Historial de cambios](CHANGELOG.md)
 
-1. Descarga `Conversor_CE3X_Windows_1_3.zip` desde los archivos de la release.
-2. Extrae **todo el ZIP** en una carpeta nueva.
-3. Abre `Conversor_CE3X.exe`.
-4. Selecciona el `.cex` de CE3X 3.2 y una carpeta de resultados.
-5. Pulsa **Convertir y generar diagnóstico**.
-6. Abre el resultado en CE3X 2.3 y recalcula antes de emitir informes.
+El ZIP incluye el ejecutable y Python. No necesitas instalar Python ni otros paquetes. En Releases, descarga `Conversor_CE3X_Windows_1_3.zip`; los archivos llamados **Source code** contienen los fuentes.
 
-Los archivos automáticos **Source code (zip)** y **Source code (tar.gz)** de GitHub contienen los fuentes. Para usar el programa directamente en Windows, descarga el ZIP indicado arriba.
+## Cómo usar la versión publicada
 
-## Ejecutar desde el código fuente
+1. Extrae **todo el ZIP** en una carpeta nueva.
+2. Abre `Conversor_CE3X.exe`.
+3. Selecciona el `.cex` de CE3X 3.2, elige una carpeta de resultados y pulsa **Convertir y generar diagnóstico**.
+4. Abre el resultado en CE3X 2.3, revisa sus datos y recalcula antes de emitir informes.
 
-Necesitas Python 3.11 o posterior. El motor utiliza únicamente la biblioteca estándar y no requiere instalar paquetes adicionales.
+Conserva las carpetas del paquete junto al ejecutable. El `.exe` suelto no funciona.
 
-Clona este repositorio o descarga su código y ejecuta estos comandos desde la carpeta principal:
+## Qué convierte
 
-```sh
-python app/converter.py self-test
-python -m unittest discover -s fuentes -p test_converter.py -v
-python app/converter.py convert --source origen.cex --template app/plantilla_23.cex --outdir resultados
-```
+- Datos generales, cerramientos, ventanas e instalaciones residenciales de los tipos contrastados.
+- Conjuntos de mejora de fotovoltaica, aislamiento y sustitución de ventanas contrastados, con sus datos económicos.
+- Textos con acentos, eñes y diéresis, reparando los escapes literales reconocidos.
 
-Cada conversión crea una carpeta `intento_...` con el archivo `convertido_CE3X_2_3.cex`, los registros de cambios y un ZIP de diagnóstico junto a esa carpeta. Los originales no se sobrescriben.
+Los originales se conservan y el trabajo se realiza localmente.
 
-Abre la salida en CE3X 2.3, revisa los elementos e instalaciones y recalcula la calificación, los conjuntos de mejora y su análisis económico. Guarda una nueva copia y regenera los informes y complementos.
+## Antes de utilizar el resultado
 
-## Compilar y ejecutar la interfaz en Windows
+Es una herramienta experimental, no oficial. El estado **REVISAR** indica comprobaciones estructurales, no validación en CE3X.
 
-La interfaz está escrita en C y utiliza la API nativa de Windows. Para compilarla, instala Zig 0.13.0, añade `zig.exe` al `PATH` y ejecuta desde la carpeta principal:
+**Recalcula el edificio, los conjuntos de mejora y el análisis económico en CE3X 2.3.** Los resultados guardados proceden de la versión 3.2. Revisa las instalaciones y regenera los informes y complementos.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File fuentes/compilar_windows.ps1
-```
+No garantiza compatibilidad universal ni genera por sí sola certificados, XML de registro o justificaciones HE0/HE1. La apertura, edición y el recálculo de los resultados siguen pendientes de validación en CE3X 2.3.
 
-El script genera `Conversor_CE3X.exe` en la raíz del proyecto. La interfaz busca el motor en `app/` y Python en `runtime/python.exe`, junto al ejecutable.
+## Si encuentras un fallo
 
-Para preparar Python para la interfaz, descarga la [distribución embebida oficial Python 3.11.9 para Windows x64](https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip) y extrae todo su contenido en `runtime/`. Conserva su `LICENSE.txt` y los avisos de licencia.
+Indica la versión del conversor, qué estabas haciendo y el mensaje exacto en [Issues](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/issues). Si adjuntas un diagnóstico, revísalo antes: puede contener datos del proyecto.
 
-Ejecuta `Conversor_CE3X.exe`, selecciona el `.cex` de origen y una carpeta de resultados. La referencia estructural 2.3 está incluida en `app/plantilla_23.cex`.
+## Desarrollo
 
-## Funciones
+La próxima versión 1.4.0 se está preparando: salida junto al original y diagnóstico guardado solo a petición. Todavía no está publicada en Releases. Las instrucciones anteriores corresponden a la versión 1.3.0 disponible para descargar.
 
-- Adaptación de datos generales, cerramientos, ventanas e instalaciones residenciales contrastadas.
-- Conservación y adaptación de conjuntos de mejora de fotovoltaica, aislamiento y sustitución de ventanas, con sus equipos y datos económicos asociados.
-- Conservación de nombres, descripciones, costes, mantenimiento, vida útil, facturas, tarifas y selección de conjuntos en el informe.
-- Reparación automática de escapes literales de acentos, eñes y diéresis españoles, incluidas mayúsculas y medidas de mejora. Conserva el texto correcto y diferencia STRING y UNICODE.
-- Registro de cambios, errores con ubicación del dato y ZIP de diagnóstico por intento.
-- Motor editable para aplicar parches sin recompilar la interfaz.
-
-## Alcance y validación
-
-**El estado REVISAR indica comprobaciones estructurales superadas, no validación por CE3X.** La versión 1.3 incluye 49 pruebas del motor y se ha contrastado estructuralmente con archivos reales. La apertura, edición y el recálculo en CE3X 2.3 siguen pendientes de validación en la aplicación.
-
-Los resultados y amortizaciones guardados se conservan como datos del origen 3.2. **No se han recalculado con el motor 2.3.** Recalcula antes de emitir informes. La configuración de complementos se reinicia y debe regenerarse.
-
-El perfil admite archivos residenciales textuales de 15 bloques, protocolo pickle 0, de hasta 64 MiB. No garantiza compatibilidad universal. Los tipos, clases o funciones nuevas sin regla contrastada producen un error con diagnóstico, evitando eliminar silenciosamente conjuntos.
-
-No es una herramienta oficial de CE3X y no genera por sí sola certificados, XML de registro ni justificaciones HE0/HE1. No incluye el programa CE3X ni datos de proyectos particulares.
-
-## Informar de un error
-
-Cada intento genera una carpeta y `intento_..._diagnostico.zip`. Los errores del conversor se registran automáticamente.
-
-Si el fallo ocurre en CE3X, escribe la acción, elemento y mensaje exacto en el conversor; pulsa **Guardar error / adjunto** y selecciona su log o una captura. **Intento previo** permite completar un diagnóstico después de cerrar el programa.
-
-También puedes añadir evidencia desde el motor:
-
-```sh
-python app/converter.py evidence --run resultados/intento_... --log CE3X.exe.log --notes-file notas.txt
-```
-
-**Revisa el ZIP antes de publicarlo en una incidencia:** puede contener datos personales, información técnica del proyecto y los adjuntos que hayas incluido. Publica solo la información que quieras compartir.
-
-## Estructura del código
-
-| Archivo | Función |
-| --- | --- |
-| `app/converter.py` | Motor de conversión y comandos de diagnóstico |
-| `app/profile.json` | Reglas estructurales del perfil residencial |
-| `app/mm_schema_23.json` | Campos contrastados de medidas de mejora |
-| `app/plantilla_23.cex` | Referencia estructural neutral para el formato 2.3 |
-| `fuentes/launcher.c` | Interfaz nativa Windows x64 |
-| `fuentes/compilar_windows.ps1` | Compilación de la interfaz con Zig |
-| `fuentes/test_converter.py` | Pruebas de regresión autónomas |
-| `fuentes/DESARROLLO.txt` | Notas de implementación y depuración |
-| `fuentes/VALIDACION.txt` | Evidencia y límites de la validación de la versión 1.3 |
-
-El esquema contiene nombres de campos contrastados, sin valores de otro edificio. Cada diagnóstico identifica las versiones y hashes del motor, perfil y esquema. La plantilla es una referencia estructural neutral, no representa una vivienda y no sirve para certificarla.
-
-El repositorio contiene los fuentes y recursos necesarios para trabajar con el código. El runtime de Python y los ejecutables se preparan localmente siguiendo las instrucciones anteriores.
+El código de la interfaz está en `fuentes/launcher.c` y el motor en `app/converter.py`. Para ejecutar desde los fuentes, compilar o colaborar, consulta la [guía de desarrollo](docs/DESARROLLO.md). Las notas técnicas de validación de la versión 1.3 están en `fuentes/VALIDACION.txt`.

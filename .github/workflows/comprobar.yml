@@ -1,0 +1,62 @@
+name: Comprobar motor e interfaz Windows
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Pruebas del motor
+        run: python -B -m unittest discover -s fuentes -p test_converter.py -v
+      - name: Preparar Zig 0.13.0
+        shell: pwsh
+        run: |
+          $index = Invoke-RestMethod 'https://ziglang.org/download/index.json'
+          $release = $index.'0.13.0'.'x86_64-windows'
+          Invoke-WebRequest $release.tarball -OutFile "$env:RUNNER_TEMP/zig.zip"
+          if ((Get-FileHash "$env:RUNNER_TEMP/zig.zip" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $release.shasum) {
+            throw 'El SHA256 de Zig no coincide con el publicado por el proveedor.'
+          }
+          Expand-Archive "$env:RUNNER_TEMP/zig.zip" "$env:RUNNER_TEMP/zig"
+          $zig = Get-ChildItem "$env:RUNNER_TEMP/zig" -Recurse -Filter zig.exe | Select-Object -First 1
+          $zig.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Compilar interfaz nativa
+        shell: pwsh
+        run: ./fuentes/compilar_windows.ps1
+      - name: Preparar Python portatil
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip' -OutFile "$env:RUNNER_TEMP/python.zip"
+          Expand-Archive "$env:RUNNER_TEMP/python.zip" runtime
+          ./runtime/python.exe -I -X utf8 -B app/converter.py self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Fallo del motor con Python portatil.' }
+          ./runtime/python.exe -I -X utf8 -B -m unittest discover -s fuentes -p test_converter.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Fallo de regresion con Python portatil.' }
+      - name: Probar comunicacion entre interfaz y motor
+        shell: pwsh
+        run: |
+          $resultPath = "$env:RUNNER_TEMP/ce3x_selftest.txt"
+          $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--self-test', $resultPath) -PassThru -Wait
+          if ($process.ExitCode -ne 0 -or (Get-Content $resultPath -Raw).Trim() -ne 'OK') {
+            throw 'Fallo de comunicacion entre el ejecutable y Python.'
+          }
+      - name: Conservar compilacion de prueba
+        uses: actions/upload-artifact@v4
+        with:
+          name: Conversor_CE3X_1_4_0_prueba
+          path: |
+            Conversor_CE3X.exe
+            app/
+            runtime/
+          retention-days: 14
