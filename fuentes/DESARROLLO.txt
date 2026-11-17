@@ -1,0 +1,57 @@
+DESARROLLO Y DEPURACION
+
+El lanzador (launcher.c) solo proporciona la interfaz, recoge rutas y notas,
+llama al motor incluido y muestra el estado. No usa cmd.exe ni PowerShell
+para procesar las rutas del usuario. El ejecutable esta construido para x64.
+
+El motor (app/converter.py) realiza estas etapas:
+1. Crea un intento unico y calcula SHA-256 de las entradas y el perfil.
+2. Lee 15 bloques, registra offsets normalizados a LF y crea datos inertes.
+   GLOBAL e INST nunca importan modulos de CE3X. REDUCE solo admite la forma
+   de reconstruccion observada y Decimal finito desde texto validado. No llama
+   funciones arbitrarias del archivo.
+3. Valida referencias, tipos, nombres, superficies y estructuras conocidas.
+4. Adapta campos con reglas explicitas. Registra cada retirada y cada cambio.
+5. Adapta conjuntos y caches al esquema 2.3, conserva datos economicos y
+   marca resultados como procedentes de 3.2. Reinicia configuracion de complementos.
+6. Escribe protocolo 0, conserva STRING/UNICODE e INST/REDUCE y usa CRLF.
+7. Relee el archivo y compara valores, tipos y estilos antes de publicarlo.
+8. Guarda resultado, excepcion y ZIP. Nunca sobrescribe las entradas.
+
+Ejecutar pruebas, desde la carpeta principal del paquete:
+  python -m unittest discover -s fuentes -p test_converter.py -v
+
+Prueba basica del runtime y codificacion:
+  python app\converter.py self-test
+
+Conversion sin interfaz:
+  python app\converter.py convert --source "C:\datos\nuevo.cex" --template "app\plantilla_23.cex" --outdir "C:\datos\salidas"
+
+Anadir evidencia sin interfaz:
+  python app\converter.py evidence --run "C:\datos\salidas\intento_..." --log "C:\datos\CE3X.exe.log" --notes-file "C:\datos\notas.txt"
+
+Prueba del lanzador y runtime:
+  Conversor_CE3X.exe --self-test "C:\datos\resultado_motor.txt"
+
+Si una regla resulta insuficiente, obtener una muestra 3.2 y otra 2.3 con el
+mismo elemento y entradas. Comparar las estructuras sin introducir valores
+fisicos de un proyecto ajeno. Anadir la regresion correspondiente y aumentar
+profile_version o VERSION antes de distribuir la correccion.
+
+El perfil actual se basa en las diferencias OBSERVADAS en muestras residenciales
+3.2 y 2.3 contrastadas. No se han deducido longitudes para tipos de cerramiento no
+presentes en esas muestras. Un E_ENVELOPE_UNKNOWN requiere una nueva muestra.
+No basta con anadir un numero al JSON para validar compatibilidad semantica.
+
+Los dos bloques reservados finales se conservan de la plantilla; no se ha
+establecido su funcion. Tambien hay que verificar el comportamiento de
+los parametros estimados de instalaciones al ejecutarlos en el motor 2.3.
+
+Los problemas internos de CE3X se registran adjuntando su log/captura y notas.
+El conversor no puede conocer una excepcion que CE3X no expone ni almacena.
+
+La reparacion de texto es obligatoria. Conserva ciclos y referencias compartidas.
+El esquema de mejoras contiene listas de campos permitidos y requeridos derivadas
+de objetos nativos 2.3, sin datos fisicos. Las listas requeridas usan la interseccion
+de campos observados, porque clases como Escala tienen variantes distintas.
+Los resultados numericos guardados no equivalen a un recalculo con el motor 2.3.

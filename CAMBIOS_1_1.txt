@@ -1,0 +1,9 @@
+VERSION 1.1.0
+- Lectura y escritura controlada de Decimal en resultados antiguos.
+- Campos generales adicionales 3.2: inventario, aviso y control de superficie.
+- Campo adicional vacio en configuracion del informe: retirada registrada.
+- Lista de clases contrastadas para impedir trasladar clases exclusivas 3.2.
+- Verificacion de todas las propiedades de ventanas y bibliotecas conservadas.
+- La reparacion de acentos mantiene activas las comprobaciones de conservacion.
+- Boton Intento previo para anadir logs tras cerrar y reabrir el programa.
+- 36 pruebas automaticas. Conversion estructural de dos archivos reales.

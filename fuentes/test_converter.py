@@ -1,0 +1,260 @@
+"""Pruebas de regresion autonomas. Integracion opcional con archivos locales."""
+import copy
+import io
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest import mock
+import zipfile
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
+import converter as c
+
+class ConverterTests(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
+        self.template=c.read_cex(c.ROOT/'plantilla_23.cex')
+        self.profile=json.loads((c.ROOT/'profile.json').read_text(encoding='utf-8'))
+        self.src=copy.deepcopy(self.template)
+        self.src[0]=c.LegacyString('CE3Xv3.2 Residencial')
+        self.src[1]=['']*29;self.src[2]+=['']*5;self.src[4]+=[[],[]]
+        self.src[2][6]='86.31'
+        self.src[3][0]=[['Partición superior','Partición Interior','46.10',1.19,120,'Espacio bajo cubierta inclinada','','Sin patrón','Estimadas',['Ligeramente Ventilado','52.27',False,'El cerramiento','Por defecto'],'','','','Edificio Objeto','horizontal superior']]
+        self.src[3][1]=[c.CexObject(c.GlobalRef('Envolvente.objetosEnvolvente','HuecoConocidas'),{
+            'descripcion':'Vñ','cerramientoAsociado':'Partición superior','superficie':'2',
+            'elementosProteccionSolar':['']*25+[False,'',''],'id':c.CexObject(c.GlobalRef('uuid','UUID'),{'int':123},'reduce'),
+            'Uvidrio':1.3,'Umarco':1.3,'Gvidrio':.7,'patronSombras':'Sin patrón'})]
+        self.src[4][5]=[['Aerotermia','mixto3',[374.8,275.8,485.4],'Bomba de Calor','Electricidad',[['86.31','100']]*3,'Estimado según Instalación',[['359','487','710'],[True,False,False],[],1],[True,'190','80','60','5.1','Por defecto','1'],['200','200','200'],'Edificio Objeto']]
+        self.source_path=self.root/'origen.cex';self.template_path=self.root/'nativo.cex'
+    def tearDown(self):self.temp.cleanup()
+    def fixture_measure(self,name='Placas fotovoltaicas'):
+        cls=c.GlobalRef('MedidasDeMejora.objetoGrupoMejoras','grupoMedidasMejora')
+        state={key:[] for key in c.mm_schema()[cls.module+'.'+cls.name]}
+        state.update(nombre=name,caracteristicas='Instalación',otrosDatos='Amortización',
+                     datosEdificioOriginal=None,datosNuevoEdificio=None,ahorro=[0,0,0,0,6.4,33.9],
+                     datosInstalaciones=[[] for _ in range(14)],
+                     mejoras=[[],['',[[] for _ in range(12)],True]],
+                     analisisEconomico=c.CexObject(c.GlobalRef(cls.module,'AnalisisEconomicoConjuntoMM'),{
+                         'inversionInicial':[8000.0],'costeMantenimiento':[150.0],'vidaUtil':[30.0],
+                         'analisisTeorico':None,'analisisFacturas':None}))
+        return c.CexObject(cls,state)
+    def test_improvements_and_economic_inputs_preserved(self):
+        self.src[5]=[self.fixture_measure(),self.fixture_measure('Aislamiento y aerotermia')]
+        self.src[6][2]=[['Instalación','Placas fotovoltaicas','Instalaciones','30','8000','150']]
+        self.src[11][:2]=[m.state['nombre'] for m in self.src[5]]
+        code,run=self.run_convert();self.assertEqual(code,0)
+        dst=c.read_cex(run/'convertido_CE3X_2_3.cex')
+        self.assertEqual(len(dst[5]),2)
+        self.assertEqual(dst[11][:2],self.src[11][:2]);self.assertEqual(dst[6],self.src[6])
+        for a,b in zip(self.src[5],dst[5]):
+            for key in ('nombre','caracteristicas','otrosDatos','ahorro'):
+                self.assertEqual(a.state[key],b.state[key])
+            self.assertEqual(len(b.state['datosInstalaciones']),12)
+            self.assertEqual(b.state['analisisEconomico'].state['inversionInicial'],[8000.0])
+        manifest=json.loads((run/'resultado.json').read_text())
+        self.assertEqual(manifest['improvement_count'],2)
+        self.assertFalse(manifest['target_results_recalculated'])
+    def test_improvement_new_generator_rejected(self):
+        measure=self.fixture_measure();measure.state['listadoGeneradoresElectricoMM']=[['generador nuevo']]
+        self.src[5]=[measure];self.assertFailure('E_MM_GENERATOR')
+    def test_automatic_repair_improvement_names_and_report_links(self):
+        name='Aislamiento a\\xf1adido y partici\\u00f3n'
+        self.src[5]=[self.fixture_measure(name)];self.src[11][0]=name
+        code,run=self.run_convert();self.assertEqual(code,0)
+        dst=c.read_cex(run/'convertido_CE3X_2_3.cex')
+        self.assertEqual(dst[5][0].state['nombre'],'Aislamiento añadido y partición')
+        self.assertEqual(dst[11][0],dst[5][0].state['nombre'])
+    def test_improvement_unknown_class_rejected(self):
+        measure=self.fixture_measure();measure.state['datosNuevoEdificio']=c.CexObject(c.GlobalRef('models','Nuevo'))
+        self.src[5]=[measure];self.assertFailure('E_MM_CLASS')
+    def test_unknown_measure_not_silently_dropped(self):
+        measure=self.fixture_measure();measure.state['mejoras'][0]=[['medida','Tipo nuevo',[]]]
+        self.src[5]=[measure];self.assertFailure('E_MM_DEFINITION')
+    def test_improvement_numeric_input_conversion(self):
+        definition=[['Aislamiento','Adición de Aislamiento Térmico',[True,False,False,True,False,False,'0.27','','','',True,['0.01']*7,[False]*4]]]
+        got=c.adapt_measure_definitions(definition,c.Audit(self.root),'medida')
+        self.assertIsInstance(got[0][2][6],float);self.assertEqual(got[0][2][6],.27)
+        self.assertEqual(definition[0][2][6],'0.27')
+    def test_pv_contribution_native_type_and_energy_preserved(self):
+        self.src[4][6]=[['Fotovoltaica','renovable',['','','',False],['632.3','','','','',''],[False,True],'Edificio Objeto']]
+        code,run=self.run_convert();self.assertEqual(code,0)
+        pv=c.read_cex(run/'convertido_CE3X_2_3.cex')[4][6][0]
+        self.assertEqual(pv[1],'Contribuciones energéticas');self.assertEqual(pv[3][0],'632.3')
+    def test_repair_text_cycles_sharing_and_capital_accents(self):
+        ob=c.CexObject(c.GlobalRef('datosEdificio','datosEdificio'))
+        shared=[c.LegacyString('A\\u00d1O \\xDC \\xC1 \\u00fc')]
+        ob.state={'parent':ob,'a':shared,'b':shared}
+        fixed=c.repair_text(ob,c.Audit(self.root),'root')
+        self.assertIs(fixed.state['parent'],fixed);self.assertIs(fixed.state['a'],fixed.state['b'])
+        self.assertEqual(fixed.state['a'][0],'AÑO Ü Á ü')
+        self.assertIsInstance(fixed.state['a'][0],c.LegacyString)
+    def test_repair_key_collision_stops_conversion(self):
+        with self.assertRaises(c.ConversionError) as ctx:
+            c.repair_text({'Partición':1,'Partici\\xf3n':2},c.Audit(self.root),'root')
+        self.assertEqual(ctx.exception.code,'E_TEXT_COLLISION')
+    def run_convert(self,fix=False,source=None):
+        self.source_path.write_bytes(c.encoded(source or self.src));self.template_path.write_bytes(c.encoded(self.template))
+        return c.convert(self.source_path,self.template_path,self.root/'salidas',fix_accents=fix)
+    def assertFailure(self,code,source=None):
+        status,run=self.run_convert(source=source)
+        self.assertEqual(status,1);r=json.loads((run/'resultado.json').read_text(encoding='utf-8'))
+        self.assertEqual(r['error_code'],code);self.assertFalse((run/'convertido_CE3X_2_3.cex').exists())
+        self.assertTrue((run/'traceback.txt').exists());self.assertTrue(run.with_name(run.name+'_diagnostico.zip').exists())
+    def test_roundtrip_accent_string_unicode(self):c.self_test()
+    def test_scanner_latin1_raw_and_escaped(self):
+        for literal in (b"S'Partici\xf3n y ni\xf1o'\n.", b"S'Partici\\xf3n y ni\\xf1o'\n."):
+            ops=list(c.protocol0_ops(literal))
+            self.assertEqual(ops[0][1],'Partición y niño')
+            self.assertEqual(ops[-1][2],len(literal)-1)
+    def test_python311_ascii_reader_never_used_for_string(self):
+        # Reproduce el lector ASCII de pickletools 3.11, incluso con \xf1 escapado.
+        def ascii_reader(stream):
+            return c.codecs.escape_decode(c.pickletools.read_stringnl(stream,decode=False))[0].decode('ascii')
+        descriptor=c.pickletools.code2op['S'].arg
+        with mock.patch.object(descriptor,'reader',ascii_reader):
+            with self.assertRaises(UnicodeDecodeError):
+                list(c.pickletools.genops(b"S'ni\\xf1o'\n."))
+            self.src[6][0]=[c.LegacyString('Año: partición, patrón y aislamiento')]
+            code,run=self.run_convert()
+            self.assertEqual(code,0,(run/'resultado.json').read_text())
+            dst=c.read_cex(run/'convertido_CE3X_2_3.cex')
+            self.assertEqual(dst[5],[])
+            self.assertEqual(dst[3][0][0][0],'Partición superior')
+    def test_scanner_rejects_binary_before_reading_payload(self):
+        with self.assertRaises(c.ConversionError) as ctx:
+            list(c.protocol0_ops(b"S'ok'\nB"))
+        self.assertEqual(ctx.exception.code,'E_PROTOCOL')
+    def test_scanner_rejects_bad_string_quotes_and_truncation(self):
+        for raw in (b"S'ni\\xf1o\n.",b"S'ni\\xf1o'",b"S'ok'\n"):
+            with self.assertRaises((ValueError,c.ConversionError)):
+                list(c.protocol0_ops(raw))
+    def test_roundtrip_cyclic_cache(self):
+        obj=c.CexObject(c.GlobalRef('datosEdificio','datosEdificio'))
+        obj.state['self']=obj
+        obj.state['shared']=[obj,obj]
+        raw=c.encoded([obj]);other=c.InertUnpickler(io.BytesIO(raw.replace(b'\r\n',b'\n')),encoding='latin1').load()
+        self.assertEqual(c.typed_value(obj),c.typed_value(other))
+        self.assertIs(other.state['self'],other)
+    def test_preserves_inst_style(self):
+        raw=c.encoded([self.src[3][1][0]])
+        self.assertIn(b'(iEnvolvente.objetosEnvolvente\nHuecoConocidas'.replace(b'\n',b'\r\n'),raw)
+    def test_succeeds_preserves_thermal_values(self):
+        status,run=self.run_convert();self.assertEqual(status,0)
+        dst=c.read_cex(run/'convertido_CE3X_2_3.cex')
+        self.assertEqual(dst[3][0],self.src[3][0]);self.assertEqual(dst[4][5][0][2],[374.8,275.8,485.4])
+        self.assertEqual(dst[4][5][0][6],'Estimado según Instalación')
+        self.assertEqual(len(dst[4][5][0]),10);self.assertEqual(len(dst[4][5][0][8]),6)
+        self.assertEqual(dst[3][1][0].cls,self.src[3][1][0].cls)
+        self.assertNotIn('id',dst[3][1][0].state)
+        self.assertEqual(len(dst[3][1][0].state['elementosProteccionSolar']),25)
+    def test_template_does_not_replace_systems(self):
+        self.template[4][5]=[['equipo de otra vivienda','mixto3',[1,2,3]]]
+        status,run=self.run_convert();self.assertEqual(status,0)
+        dst=c.read_cex(run/'convertido_CE3X_2_3.cex');self.assertEqual(dst[4][5][0][0],'Aerotermia')
+    def test_input_hashes_unchanged(self):
+        status,run=self.run_convert();r=json.loads((run/'resultado.json').read_text())
+        self.assertEqual(r['source_sha256'],c.sha(self.source_path));self.assertEqual(r['template_sha256'],c.sha(self.template_path))
+    def test_two_runs_never_overwrite(self):
+        _,a=self.run_convert();_,b=self.run_convert();self.assertNotEqual(a,b);self.assertTrue(a.exists())
+    def test_wrong_version(self):
+        src=copy.deepcopy(self.src);src[0]='CEXv2.3 Residencial';self.assertFailure('E_SOURCE_VERSION',src)
+    def test_active_new_system_group(self):
+        src=copy.deepcopy(self.src);src[4][13]=[['nuevo']];self.assertFailure('E_NEW_SYSTEM',src)
+    def test_active_new_solar_option(self):
+        src=copy.deepcopy(self.src);src[3][1][0].state['elementosProteccionSolar'][-1]='activo';self.assertFailure('E_ACTIVE_SOLAR',src)
+    def test_new_general_field(self):
+        src=copy.deepcopy(self.src);src[2][25]={'nuevo':'objeto'};self.assertFailure('E_NEW_GENERAL',src)
+    def test_source_schema(self):
+        src=copy.deepcopy(self.src);src[1].append('extra');self.assertFailure('E_SOURCE_SCHEMA',src)
+    def test_unknown_envelope(self):
+        src=copy.deepcopy(self.src);src[3][0][0][-1]='nuevo contacto';self.assertFailure('E_ENVELOPE_UNKNOWN',src)
+    def test_unknown_system_shape(self):
+        src=copy.deepcopy(self.src);src[4][5][0].append('nuevo');self.assertFailure('E_SYSTEM_ROW',src)
+    def test_orphan_window(self):
+        src=copy.deepcopy(self.src);src[3][1][0].state['cerramientoAsociado']='ausente';self.assertFailure('E_WINDOW_REFERENCE',src)
+    def test_duplicate_envelope(self):
+        src=copy.deepcopy(self.src);src[3][0].append(copy.deepcopy(src[3][0][0]));self.assertFailure('E_DUPLICATE',src)
+    def test_invalid_number(self):
+        src=copy.deepcopy(self.src);src[2][6]='nan';self.assertFailure('E_NUMBER',src)
+    def test_reset_addons_preserves_economics(self):
+        src=copy.deepcopy(self.src);src[6][0]=[['factura original',123]];src[12]={'Isover':'resultado viejo'}
+        _,run=self.run_convert(source=src);dst=c.read_cex(run/'convertido_CE3X_2_3.cex')
+        self.assertEqual(dst[6],src[6]);self.assertEqual(dst[12],{})
+    def test_truncated_file_diagnostic(self):
+        self.source_path.write_bytes(c.encoded(self.src)[:300]);self.template_path.write_bytes(c.encoded(self.template))
+        code,run=c.convert(self.source_path,self.template_path,self.root/'salidas');self.assertEqual(code,1)
+        self.assertTrue((run/'conversion.log').exists());self.assertFalse(list(run.glob('*.cex')))
+    def test_refuse_nontext_format(self):
+        self.source_path.write_bytes(b'\x80\x04N.');self.template_path.write_bytes(c.encoded(self.template))
+        code,run=c.convert(self.source_path,self.template_path,self.root/'salidas');self.assertEqual(code,1)
+    def test_literal_accents_opt_in(self):
+        src=copy.deepcopy(self.src)
+        src[3][0][0][0]='Partici\\xf3n superior';src[3][0][0][1]='Partici\\xf3n Interior'
+        src[3][1][0].state['cerramientoAsociado']='Partici\\xf3n superior'
+        self.src=src;code,run=self.run_convert(fix=True);self.assertEqual(code,0)
+        dst=c.read_cex(run/'convertido_CE3X_2_3.cex');self.assertEqual(dst[3][0][0][0],'Partición superior')
+        changes=json.loads((run/'cambios.json').read_text(encoding='utf-8'));self.assertTrue(any(x['code']=='FIX_ACCENT_ESCAPE' for x in changes))
+    def test_automatic_literal_rewrite_even_with_false_legacy_flag(self):
+        src=copy.deepcopy(self.src);src[3][1][0].state['descripcion']='V\\xf1'
+        _,run=self.run_convert(source=src);dst=c.read_cex(run/'convertido_CE3X_2_3.cex');self.assertEqual(dst[3][1][0].state['descripcion'],'Vñ')
+    def test_inert_global_never_imports(self):
+        r=c.InertUnpickler(io.BytesIO(b'cos\nsystem\n.'),encoding='latin1').load()
+        self.assertEqual(r,c.GlobalRef('os','system'))
+    def test_constructor_with_args_rejected(self):
+        with self.assertRaises(c.ConversionError):c.InertUnpickler(io.BytesIO(b"(S'argumento'\nios\nsystem\n."),encoding='latin1').load()
+    def test_evidence_and_zip_history(self):
+        _,run=self.run_convert();log=self.root/'cex.log';log.write_text('Error: partición',encoding='utf-8')
+        path=c.evidence(run,log,'Al editar Partición superior');c.evidence(run,notes='Segundo error')
+        with zipfile.ZipFile(path) as z:
+            observations=[x for x in z.namelist() if x.endswith('_observacion.json')]
+            self.assertEqual(len(observations),2)
+            self.assertTrue(any(x.endswith('_adjunto.log') for x in z.namelist()))
+    def test_snapshots_exclude_personal_blocks_and_images(self):
+        self.src[1][0]='PERSONAL_SECRETO';self.src[2][17]='IMAGEN_BASE64_SECRETA'
+        _,run=self.run_convert();snapshot=(run/'modelo_origen_tecnico.json').read_text(encoding='utf-8')
+        self.assertNotIn('PERSONAL_SECRETO',snapshot);self.assertNotIn('IMAGEN_BASE64_SECRETA',snapshot)
+
+    def test_decimal_roundtrip(self):
+        fixture=[c.Decimal('0.1234567890123456789'),c.Decimal('123.00')]
+        raw=c.encoded([fixture])
+        other=c.InertUnpickler(io.BytesIO(raw.replace(b'\r\n',b'\n')),encoding='latin1').load()
+        self.assertEqual(c.typed_value(fixture),c.typed_value(other))
+    def test_decimal_nonfinite_rejected(self):
+        raw=b"cdecimal\nDecimal\n(VNaN\ntR."
+        with self.assertRaises(c.ConversionError):c.InertUnpickler(io.BytesIO(raw),encoding='latin1').load()
+    def test_new_general_scalars_recorded(self):
+        self.src[2][21:]=['','86.31','1','0','2']
+        code,run=self.run_convert();self.assertEqual(code,0)
+        r=json.loads((run/'datos_no_transferidos.json').read_text())
+        self.assertTrue(any(x['path']=='blocks[2][21:]' and x['value']==['','86.31','1','0','2'] for x in r))
+        self.assertIn('W_GENERAL_32',(run/'conversion.log').read_text())
+    def test_extra_area_conflict_rejected(self):
+        self.src[2][22]='200';self.assertFailure('E_AREA_32')
+    def test_unknown_target_class_rejected(self):
+        self.src[8].append(c.CexObject(c.GlobalRef('models','Material'),{'nombre':'nuevo'}))
+        self.assertFailure('E_TARGET_CLASS')
+    def test_window_thermal_corruption_detected(self):
+        audit=c.Audit(self.root)
+        dst=c.transfer(self.src,self.template,self.profile,audit)
+        dst[3][1][0].state['Uvidrio']=99
+        with self.assertRaises(c.ConversionError):c.compare_windows(self.src,dst,self.profile)
+    def test_fix_accents_does_not_disable_preservation(self):
+        audit=c.Audit(self.root);dst=c.transfer(self.src,self.template,self.profile,audit,True)
+        dst[3][0][0][3]=99
+        with self.assertRaises(c.ConversionError):c.check_preservation(self.src,dst,True)
+    def test_syntax_roundtrip_all_spanish_accents(self):
+        text='áéíóúüñ ÁÉÍÓÚÜÑ Partición Interior Sin patrón C:\\prueba'
+        raw=c.encoded([[text,c.LegacyString(text)]])
+        other=c.InertUnpickler(io.BytesIO(raw.replace(b'\r\n',b'\n')),encoding='latin1').load()
+        self.assertEqual(c.typed_value(other),c.typed_value([text,c.LegacyString(text)]))
+
+    def test_extra_empty_report_field_removed(self):
+        self.src[11].append('')
+        code,run=self.run_convert();self.assertEqual(code,0)
+        self.assertEqual(len(c.read_cex(run/'convertido_CE3X_2_3.cex')[11]),7)
+    def test_extra_active_report_field_rejected(self):
+        self.src[11].append('datos nuevos');self.assertFailure('E_REPORT_FIELDS')
+
+if __name__=='__main__':unittest.main(verbosity=2)

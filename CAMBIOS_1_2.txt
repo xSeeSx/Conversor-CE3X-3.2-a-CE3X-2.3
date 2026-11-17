@@ -1,0 +1,11 @@
+VERSION 1.2.0
+- Correccion de E_READ en bloque 5, STRING con acentos en Python 3.11.
+- Inspector de protocolo 0 con decodificacion Latin-1 explicita.
+- Se conservan los offsets y se rechazan protocolos binarios antes de leerlos.
+- No se modifica pickletools globalmente ni se reescribe el origen.
+- Autotest ampliado con cadenas Latin-1 crudas y escapadas.
+- Logger inicial: Python, plataforma, codificacion e inspector.
+- 40 pruebas superadas, incluido el lector ASCII emulado de Python 3.11.
+- Error exacto reproducido con version 1.1 y origen de tu intento;
+  origen[5] @ 69249, byte 0xf1 en posicion 34. Version 1.2 lo convierte.
+- Ejecutable recompilado con identificador 1.2.0.

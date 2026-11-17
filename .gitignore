@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Compilación y runtime local
+/runtime/
+/dist/
+/build/
+.zig-cache/
+zig-out/
+*.exe
+*.dll
+*.pyd
+*.pdb
+*.obj
+*.o
+*.zip
+
+# Proyectos y diagnósticos locales
+*.cex
+!app/plantilla_23.cex
+/resultados/
+/salidas/
+intento_*/
+*.log

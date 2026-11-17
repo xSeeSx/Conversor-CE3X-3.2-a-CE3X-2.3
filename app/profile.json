@@ -1,0 +1,22 @@
+{
+  "profile_version": "1.3.0",
+  "source_header": "CE3Xv3.2 Residencial",
+  "target_header": "CEXv2.3 Residencial",
+  "block_count": 15,
+  "administrative_fields": 26,
+  "general_fields": 21,
+  "system_groups_source": 14,
+  "system_groups_target": 12,
+  "window_solar_fields": 25,
+  "window_removed_attributes": [
+    "id"
+  ],
+  "envelope_lengths": {
+    "Fachada|aire": 15,
+    "Fachada|edificio": 13,
+    "Cubierta|aire": 15,
+    "Suelo|aire": 15,
+    "Suelo|terreno": 17,
+    "Partición Interior|horizontal superior": 15
+  }
+}

@@ -1,0 +1,21 @@
+VALIDACION 1.3.0
+49 pruebas del motor correctas, Python 3.12.14 Linux (pruebas_motor.txt).
+Incluyen acentos automaticos, mayusculas, ene, dieresis, grafos ciclicos,
+referencias compartidas, conjuntos de mejora, numericos, costes y fotovoltaica.
+Tambien se ha emulado el lector ASCII de pickletools de Python 3.11.
+Dos conversiones reales, 2 conjuntos cada una. Relectura tipada de 15 bloques.
+Conservacion verificada: nombres, descripciones, ahorros, inversion inicial,
+mantenimiento, vida util, facturas, tarifas y conjuntos seleccionados del informe.
+No quedan clases models ni uuid exclusivas de 3.2 en los conjuntos de salida.
+Se conservan ciclos parent de los edificios cacheados, consumos del origen y
+las superficies de huecos calculadas como superficieBruta - superficieNeta.
+Los resultados del origen 3.2 permanecen pendientes de recalculo en destino.
+Ejecutable recompilado: PE32+ Windows GUI x86-64. Sin casilla de reparacion.
+Runtime incluido: Python 3.11.9 Windows x64.
+
+PENDIENTE: ejecucion nativa en Windows, apertura y edicion en CE3X 2.3,
+recalculo de edificio, conjuntos, analisis economico y complementos.
+
+ORIGENES DE INTEGRACION
+8fc0502531a1ba06016b96d42fbcd83ed679446643a12f14c4eef2e28affba81 | 2 conjuntos | 1009937 bytes de salida
+59ac0bc3bcd50933ace82818f194e70eef00c121a16f5733da921635eac58074 | 2 conjuntos | 1198508 bytes de salida

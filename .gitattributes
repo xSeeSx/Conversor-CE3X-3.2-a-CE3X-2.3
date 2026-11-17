@@ -1,0 +1,8 @@
+* text=auto
+*.py text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.c text eol=lf
+*.ps1 text eol=crlf
+# Formato serializado: conservar los bytes y finales de línea originales.
+app/plantilla_23.cex -text
