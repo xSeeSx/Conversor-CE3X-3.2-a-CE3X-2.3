@@ -2,6 +2,19 @@
 
 Las versiones publicadas y sus descargas están en [Releases](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases).
 
+## 1.4.1, 2026-11-17
+
+- Ventana inicial más baja: se elimina la fila de salida y el texto explicativo repetido.
+- La dirección de conversión se integra en el título: Conversor CE3X 3.2 → 2.3.
+- Se conservan la versión, Residencial y el aviso de revisar y recalcular en CE3X 2.3.
+- El estado solo aparece al iniciar una operación o recibir un resultado; no reserva espacio en reposo.
+- Corregida una comparación incorrecta entre superficies generales de 3.2: se conserva la superficie nativa común y se registra el campo adicional.
+- `correctorSolar` pasa a ser opcional en huecos estimados de mejoras, contrastado con ejemplos nativos 2.3.
+- Soporte de las mejoras de puentes térmicos con el formato observado en los ejemplos oficiales 2.3 y 3.2.
+- Esquema de mejoras ampliado con campos opcionales contrastados en los ejemplos oficiales 2.3.
+- Regresión del ejemplo oficial residencial con dos patrones de sombras, siete ventanas y tres conjuntos de mejora.
+- Los generadores termosolares nuevos sin equivalencia contrastada siguen produciendo un error explícito.
+
 ## 1.4.0, 2026-11-17
 
 ### Interfaz
