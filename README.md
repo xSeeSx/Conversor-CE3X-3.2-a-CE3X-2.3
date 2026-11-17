@@ -33,6 +33,8 @@ Es una herramienta experimental, no oficial. El estado **REVISAR** indica compro
 
 **Recalcula el edificio, los conjuntos de mejora y el análisis económico en CE3X 2.3.** Los resultados guardados proceden de la versión 3.2. Revisa las instalaciones y regenera los informes y complementos.
 
+Los generadores termosolares nuevos de 3.2 sin equivalencia contrastada producen un error explícito. Consulta la [validación con ejemplos oficiales](docs/VALIDACION_1_4_1.md).
+
 No garantiza compatibilidad universal ni genera por sí sola certificados, XML de registro o justificaciones HE0/HE1. La apertura, edición y el recálculo de los resultados siguen pendientes de validación en CE3X 2.3.
 
 ## Si encuentras un fallo

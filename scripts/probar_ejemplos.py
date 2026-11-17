@@ -63,6 +63,17 @@ def inspect_examples(directory, report_path):
               'installer_archive_sha256': 'd92bea9f25ebd60c30ef9043ffdd3339fc84065eb415b2629b8a77f948f6b9dd',
               'app_version': c.VERSION, 'examples': records}
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    expected = [item for item in records if item['sha256']=='b57a58f3e639757e6b8576f895cc3f6cfc8abd8952cf3ce22c7238df1da54dba']
+    if not expected or not all(item.get('conversion')=='REVISAR' and item.get('shadows_preserved')
+                               and item.get('window_shadow_refs_preserved') and item.get('envelope_preserved')
+                               and item.get('shadow_patterns')==2 and item.get('improvement_count')==3
+                               for item in expected):
+        raise RuntimeError('Ha fallado la regresion del ejemplo oficial 3.2 con sombras')
+    blocked = [item for item in records if item['sha256']=='8b4ca4dbb37ec646ee9168f9cebe53905285f9693ae79191509d2a94eb31e0aa']
+    if not blocked or not all(item.get('error_code')=='E_MM_GENERATOR' for item in blocked):
+        raise RuntimeError('El generador termosolar nuevo debe producir un error explicito')
+
+
     print(json.dumps(report, ensure_ascii=True, indent=2))
     return report
 

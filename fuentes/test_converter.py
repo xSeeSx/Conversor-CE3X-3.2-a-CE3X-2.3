@@ -233,8 +233,14 @@ class ConverterTests(unittest.TestCase):
         r=run.audit.omitted
         self.assertTrue(any(x['path']=='blocks[2][21:]' and x['value']==['','86.31','1','0','2'] for x in r))
         self.assertIn('W_GENERAL_32',run.audit.log_text())
-    def test_extra_area_conflict_rejected(self):
-        self.src[2][22]='200';self.assertFailure('E_AREA_32')
+    def test_new_area_is_recorded_without_replacing_legacy_area(self):
+        self.src[2][22]='200'
+        code, attempt = self.run_convert()
+        self.assertEqual(code, 0, attempt.summary)
+        target = c.read_cex(attempt.output)
+        self.assertEqual(target[2][6], '86.31')
+        self.assertTrue(any(item['path']=='blocks[2][21:]' and item['value'][1]=='200'
+                            for item in attempt.audit.omitted))
     def test_unknown_target_class_rejected(self):
         self.src[8].append(c.CexObject(c.GlobalRef('models','Material'),{'nombre':'nuevo'}))
         self.assertFailure('E_TARGET_CLASS')
@@ -406,6 +412,37 @@ class ConverterTests(unittest.TestCase):
         self.assertIn('Origen á ñ_CE3X2.3.cex', result.stdout)
         self.assertEqual(set(self.root.iterdir()), {self.source_path, self.template_path, c.output_path(self.source_path)})
 
+
+    def test_shadow_patterns_and_element_references_are_preserved(self):
+        # Exact polygons and coefficients from the official 3.2 teaching example.
+        fixture = Path(__file__).parent / 'fixtures/sombras_oficiales.json'
+        self.src[9] = json.loads(fixture.read_text(encoding='utf-8'))['patterns']
+        self.src[10] += ['Sombra Oeste','Sombra Sur']
+        self.src[3][0][0][7] = 'Sombra Sur'
+        self.src[3][1][0].state['patronSombras'] = 'Sombra Oeste'
+        code, attempt = self.run_convert()
+        self.assertEqual(code, 0, attempt.summary)
+        target = c.read_cex(attempt.output)
+        self.assertEqual(c.typed_value(target[9:11]),c.typed_value(self.src[9:11]))
+        self.assertEqual(target[3][0][0][7],'Sombra Sur')
+        self.assertEqual(target[3][1][0].state['patronSombras'],'Sombra Oeste')
+
+    def test_bridge_improvement_preserves_native_text_values(self):
+        values = [True,'0.20',True,'0.03'] + [False,'']*8
+        definition = [['Trasdosado de pilares','Mejora de Puentes Térmicos',values]]
+        result = c.adapt_measure_definitions(definition,c.Audit(),'prueba')
+        self.assertEqual(result,definition)
+        self.assertIsInstance(result[0][2][1],str)
+
+    def test_bridge_improvement_rejects_invalid_selection_or_value(self):
+        for values in ([True,'nan']+[False,'']*9, [True,'']+[False,'']*9,
+                       [1,'0.2']+[False,'']*9, [True,'0.2']):
+            with self.subTest(values=values),self.assertRaises(c.ConversionError):
+                c.adapt_measure_definitions([['Pilar','Mejora de Puentes Térmicos',values]],c.Audit(),'prueba')
+
+    def test_negative_new_area_is_rejected(self):
+        self.src[2][22]='-1'
+        self.assertFailure('E_NUMBER')
 
 if __name__=='__main__':unittest.main(verbosity=2)
 

@@ -482,6 +482,14 @@ def adapt_measure_definitions(definitions,audit,path):
         elif item[1]=='Sustitución/mejora de Huecos':
             require(len(data)==21,'E_MM_DEFINITION','Sustitucion de huecos con campos desconocidos',p)
             indices=(3,4,12,15)
+        elif item[1]=='Mejora de Puentes Térmicos':
+            require(len(data)==20, 'E_MM_DEFINITION', 'Mejora de puentes con campos desconocidos', p)
+            for j in range(0, 20, 2):
+                require(isinstance(data[j], bool), 'E_MM_DEFINITION', 'Seleccion de puente no booleana', p+f'[2][{j}]')
+                if data[j] or not empty(data[j+1]):
+                    as_num(data[j+1], p+f'[2][{j+1}]')
+            # Los ejemplos nativos 2.3 conservan estos valores como texto.
+            indices=()
         else:
             raise ConversionError('E_MM_DEFINITION','Tipo de medida sin regla contrastada: '+str(item[1]),p)
         for j in indices:
@@ -585,11 +593,11 @@ def transfer(source, template, profile, audit, fix_accents=True):
     if any(not empty(x) for x in source[2][21:]):
         require(all(isinstance(x,(str,bool,int,float)) or x is None for x in source[2][21:]),
                 'E_NEW_GENERAL', 'Campos nuevos con estructura no reconocida', 'generales[21:]')
-        # La superficie adicional no debe contradecir la superficie comun de 2.3.
-        extra_area=source[2][22]
-        if not empty(extra_area):
-            require(abs(as_num(extra_area,'generales[22]')-as_num(source[2][6],'generales[6]'))<0.005,
-                    'E_AREA_32', 'Las dos superficies generales difieren; revisar antes de convertir', 'generales[22]')
+        # Los ejemplos oficiales 3.2 usan superficies distintas en [6] y [22].
+        # [22] no tiene una equivalencia contrastada en 2.3: conservar [6] y
+        # registrar el campo adicional, sin exigir una igualdad inexistente.
+        if not empty(source[2][22]):
+            as_num(source[2][22], 'generales[22]', minimum=0)
         audit.event('WARNING','W_GENERAL_32',
                     'Campos generales exclusivos 3.2 sin casilla en 2.3: registrados en datos_no_transferidos.json. Revisar datos generales al abrir.',
                     path='generales[21:]', values=json_value(source[2][21:]))
