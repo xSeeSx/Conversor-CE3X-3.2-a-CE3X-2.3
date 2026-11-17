@@ -70,8 +70,8 @@ def inspect_examples(directory, report_path):
                                for item in expected):
         raise RuntimeError('Ha fallado la regresion del ejemplo oficial 3.2 con sombras')
     blocked = [item for item in records if item['sha256']=='8b4ca4dbb37ec646ee9168f9cebe53905285f9693ae79191509d2a94eb31e0aa']
-    if not blocked or not all(item.get('error_code')=='E_MM_GENERATOR' for item in blocked):
-        raise RuntimeError('El generador termosolar nuevo debe producir un error explicito')
+    if not blocked or not all(item.get('conversion')=='DECISION' and item.get('error_code')=='E_SOLAR_DECISION' for item in blocked):
+        raise RuntimeError('El generador termosolar debe requerir una decision explicita')
 
 
     print(json.dumps(report, ensure_ascii=True, indent=2))

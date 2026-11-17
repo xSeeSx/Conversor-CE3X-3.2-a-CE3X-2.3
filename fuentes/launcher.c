@@ -167,6 +167,53 @@ static int request(const WCHAR *json, int kind) {
     if (window) SetTimer(window, 1, 100, NULL);
     return 1;
 }
+static int decisionResult, decisionPreviewSaved;
+static const WCHAR *decisionPreviewPath;
+static int savePreview(HWND target, const WCHAR *path);
+static LRESULT CALLBACK DecisionProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_COMMAND && (LOWORD(wp) == 501 || LOWORD(wp) == 502 || LOWORD(wp) == IDCANCEL)) {
+        decisionResult = LOWORD(wp); DestroyWindow(hwnd); return 0;
+    }
+    if (msg == WM_CLOSE) { decisionResult = IDCANCEL; DestroyWindow(hwnd); return 0; }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+static int solarDecision(const WCHAR *message, int canAdapt) {
+    WNDCLASSW wc = {0}; wc.lpfnWndProc = DecisionProc; wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = L"CE3XSolarDecision"; wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1); RegisterClassW(&wc);
+    RECT parent; GetWindowRect(window, &parent); decisionResult = IDCANCEL;
+    HWND dialog = CreateWindowExW(WS_EX_DLGMODALFRAME, wc.lpszClassName,
+        L"Datos sin equivalencia directa en CE3X 2.3", WS_POPUP | WS_CAPTION | WS_SYSMENU,
+        parent.left + 20, parent.top + 20, 700, 350, window, NULL, wc.hInstance, NULL);
+    if (!dialog) return IDCANCEL;
+    HWND body = CreateWindowExW(0, L"EDIT", message, WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
+        20, 18, 650, 225, dialog, NULL, wc.hInstance, NULL);
+    SendMessageW(body, WM_SETFONT, (WPARAM)font, TRUE);
+    HWND adapt = CreateWindowExW(0,L"BUTTON",L"Adaptar a 2.3",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+        20,265,190,36,dialog,(HMENU)501,wc.hInstance,NULL);
+    HWND omit = CreateWindowExW(0,L"BUTTON",L"Omitir lo indicado",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+        225,265,230,36,dialog,(HMENU)502,wc.hInstance,NULL);
+    HWND cancel = CreateWindowExW(0,L"BUTTON",L"Cancelar",WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+        470,265,200,36,dialog,(HMENU)IDCANCEL,wc.hInstance,NULL);
+    SendMessageW(adapt,WM_SETFONT,(WPARAM)font,TRUE); EnableWindow(adapt,canAdapt);
+    SendMessageW(omit,WM_SETFONT,(WPARAM)font,TRUE); SendMessageW(cancel,WM_SETFONT,(WPARAM)font,TRUE);
+    EnableWindow(window,FALSE); ShowWindow(dialog,SW_SHOW); SetFocus(cancel);
+    if (decisionPreviewPath) {
+        RedrawWindow(dialog,NULL,NULL,RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        decisionPreviewSaved=savePreview(dialog,decisionPreviewPath);
+        SendMessageW(dialog,WM_COMMAND,IDCANCEL,0);
+    }
+    MSG msg;
+    while (IsWindow(dialog)) {
+        int result=GetMessageW(&msg,NULL,0,0);
+        if (result<=0) { if (result==0) PostQuitMessage((int)msg.wParam); break; }
+        if (!IsDialogMessageW(dialog,&msg)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+    }
+    if (IsWindow(dialog)) DestroyWindow(dialog);
+    EnableWindow(window,TRUE); SetActiveWindow(window);
+    return decisionResult;
+}
+
 static void received(void) {
     response[responseSize] = 0;
     char *line = strchr(response, '\n'); if (line) *line = 0;
@@ -176,8 +223,16 @@ static void received(void) {
     WCHAR path[PATHCAP] = L"", message[8192] = L"", text[PATHCAP + 8192];
     MultiByteToWideChar(CP_UTF8, 0, first + 1, -1, path, PATHCAP);
     MultiByteToWideChar(CP_UTF8, 0, second + 1, -1, message, 8192);
+    if (operation == 1 && (strcmp(response,"DECISION_ADAPT")==0 || strcmp(response,"DECISION_OMIT")==0)) {
+        if (window) KillTimer(window,1);
+        int selected = solarDecision(message,strcmp(response,"DECISION_ADAPT")==0);
+        WCHAR json[COMMANDCAP] = L"{\"command\":\"decision\",\"id\":";
+        if (!appendJson(json,path)) { setBusy(0); return; }
+        wcscat(json,selected==501 ? L",\"choice\":\"adapt\"}" : selected==502 ? L",\"choice\":\"omit\"}" : L",\"choice\":\"cancel\"}");
+        setBusy(0); request(json,1); return;
+    }
     if (operation == 1) {
-        hasAttempt = 1;
+        hasAttempt = strcmp(response,"CANCELADO")!=0;
         wcsncpy(lastOutput, path, PATHCAP - 1); lastOutput[PATHCAP - 1] = 0;
         swprintf(text, PATHCAP + 8192, L"%ls", strcmp(response, "REVISAR") == 0 ? L"Conversión completada." : message);
     } else if (operation == 2) {
@@ -328,7 +383,7 @@ static void initializeUI(void) {
     headerBrush = CreateSolidBrush(UI_HEADER);
     HWND title = control(L"STATIC", L"Conversor CE3X 3.2 \x2192 2.3", SS_CENTERIMAGE, 36, 31, 688, 33, IDC_TITLE);
     SendMessageW(title, WM_SETFONT, (WPARAM)titleFont, TRUE);
-    HWND version = control(L"STATIC", L"v1.4.1  |  Residencial", 0, 37, 66, 420, 18, IDC_VERSION);
+    HWND version = control(L"STATIC", L"v1.5.0  |  Residencial", 0, 37, 66, 420, 18, IDC_VERSION);
     SendMessageW(version, WM_SETFONT, (WPARAM)smallFont, TRUE);
     control(L"STATIC", L"Archivo de entrada", SS_CENTERIMAGE, 36, 123, 140, 30, IDC_INPUT_LABEL);
     sourceEdit = control(L"EDIT", L"", ES_AUTOHSCROLL | WS_TABSTOP, 182, 123, 403, 30, IDC_SOURCE);
@@ -356,14 +411,14 @@ static void initializeUI(void) {
 }
 
 // Render the real native window for CI review without invoking the conversion engine.
-static int savePreview(const WCHAR *path) {
-    RECT rect; GetWindowRect(window, &rect);
+static int savePreview(HWND target, const WCHAR *path) {
+    RECT rect; GetWindowRect(target, &rect);
     int width = rect.right - rect.left, height = rect.bottom - rect.top;
-    HDC screen = GetDC(window), memory = CreateCompatibleDC(screen);
+    HDC screen = GetDC(target), memory = CreateCompatibleDC(screen);
     HBITMAP bitmap = CreateCompatibleBitmap(screen, width, height);
-    if (!memory || !bitmap) { if (memory) DeleteDC(memory); if (bitmap) DeleteObject(bitmap); ReleaseDC(window, screen); return 0; }
+    if (!memory || !bitmap) { if (memory) DeleteDC(memory); if (bitmap) DeleteObject(bitmap); ReleaseDC(target, screen); return 0; }
     HGDIOBJ old = SelectObject(memory, bitmap);
-    BOOL painted = PrintWindow(window, memory, 0);
+    BOOL painted = PrintWindow(target, memory, 0);
     SelectObject(memory, old);
     BITMAPINFO info = {0}; info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     info.bmiHeader.biWidth = width; info.bmiHeader.biHeight = height;
@@ -381,7 +436,7 @@ static int savePreview(const WCHAR *path) {
         }
     }
     if (pixels) HeapFree(GetProcessHeap(), 0, pixels);
-    DeleteObject(bitmap); DeleteDC(memory); ReleaseDC(window, screen); return saved;
+    DeleteObject(bitmap); DeleteDC(memory); ReleaseDC(target, screen); return saved;
 }
 
 static LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
@@ -465,10 +520,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR commandLine, i
     window = CreateWindowW(wc.lpszClassName, L"Conversor CE3X 3.2 \x2192 2.3", style, CW_USEDEFAULT, CW_USEDEFAULT,
         rect.right - rect.left, rect.bottom - rect.top, NULL, NULL, instance, NULL);
     if (!window) { LocalFree(argv); return 1; }
+    if (argc >= 3 && wcscmp(argv[1], L"--preview-decision") == 0) {
+        decisionPreviewPath=argv[2]; ShowWindow(window,SW_SHOWNORMAL); UpdateWindow(window);
+        solarDecision(L"Edificio: SOLAR_MENSUAL. Produccion 1413.258 kWh/ano. Se propone cobertura ACS 70 %. Se pierden reparto mensual y potencia solar. Adaptacion ensayada solo con ACS electrico sin acumulacion, zona D2. Omitir elimina esta instalacion solar de la salida. Revisar y recalcular en CE3X 2.3. El original se conserva.", argc < 4 || wcscmp(argv[3],L"omit") != 0);
+        DestroyWindow(window); LocalFree(argv); return decisionPreviewSaved ? 0 : 1;
+    }
     if (argc >= 3 && wcscmp(argv[1], L"--preview") == 0) {
         SetWindowTextW(sourceEdit, L"C:\\Proyectos\\Vivienda.cex");
         ShowWindow(window, SW_SHOWNORMAL); UpdateWindow(window);
-        int saved = savePreview(argv[2]); DestroyWindow(window); LocalFree(argv); return saved ? 0 : 1;
+        int saved = savePreview(window,argv[2]); DestroyWindow(window); LocalFree(argv); return saved ? 0 : 1;
     }
     if (argc >= 2) { SetWindowTextW(sourceEdit, argv[1]); }
     LocalFree(argv); ShowWindow(window, show); UpdateWindow(window);

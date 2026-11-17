@@ -83,10 +83,19 @@ jobs:
           try { $image.Save("$pwd/_release/vista_previa.png", [System.Drawing.Imaging.ImageFormat]::Png) }
           finally { $image.Dispose() }
           Remove-Item $bitmapPath
+          foreach ($mode in @('adapt', 'omit')) {
+            $bitmapPath = "$pwd/_release/decision_$mode.bmp"
+            $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--preview-decision', $bitmapPath, $mode) -PassThru -Wait
+            if ($process.ExitCode -ne 0) { throw 'No se pudo capturar el dialogo de decision.' }
+            $image = [System.Drawing.Image]::FromFile($bitmapPath)
+            try { $image.Save("$pwd/_release/decision_$mode.png", [System.Drawing.Imaging.ImageFormat]::Png) }
+            finally { $image.Dispose() }
+            Remove-Item $bitmapPath
+          }
       - name: Conservar paquete y vista previa
         uses: actions/upload-artifact@v4
         with:
-          name: Conversor_CE3X_1_4_1_artefactos
+          name: Conversor_CE3X_1_5_0_artefactos
           path: |
             _release/*
             _validacion/**

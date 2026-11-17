@@ -23,7 +23,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass, field
 
-VERSION = '1.4.1'
+VERSION = '1.5.0'
 ROOT = Path(__file__).resolve().parent
 MAX_BYTES = 64 * 1024 * 1024
 BLOCK_NAMES = ['version', 'administrativos', 'generales', 'envolvente', 'instalaciones',
@@ -586,6 +586,154 @@ def convert_measures(measures,economics,profile,audit):
     return output,economic
 
 
+SOLAR_MONTHS = ('enero','febrero','marzo','abril','mayo','junio',
+                'julio','agosto','septiembre','octubre','noviembre','diciembre')
+
+
+def solar_key(generator):
+    require(isinstance(generator,CexObject),'E_SOLAR_SCHEMA','Generador solar desconocido')
+    ident=generator.state.get('id')
+    if isinstance(ident,CexObject) and isinstance(ident.state.get('int'),int):
+        return str(ident.state['int'])
+    return hashlib.sha256(json_text(json_value(generator)).encode('utf-8')).hexdigest()
+
+
+def solar_candidate(generators, systems, general, envelope_changes=False):
+    """Only the electric DHW, no-storage D2 configuration tested in CE3X is offered."""
+    try:
+        require(len(generators)==1,'E_SOLAR_SCOPE','Solo se ha validado un generador por instalacion')
+        g=generators[0]
+        require(g.cls==GlobalRef('models','GeneradorTermosolar'),'E_SOLAR_SCOPE','Clase solar no validada')
+        s=g.state
+        known=set(SOLAR_MONTHS)|{'nombre','zona','potencia','id','servicio','tipo','consumoMensual'}
+        require(not set(s)-known,'E_SOLAR_SCOPE','Campos solares nuevos no validados')
+        require(s.get('servicio') in (None,'ACS') and s.get('tipo') in (None,'Otro'),
+                'E_SOLAR_SCOPE','Servicio o tipo solar no validado')
+        require(s.get('zona')=='Edificio Objeto','E_SOLAR_SCOPE','Solar asignada a una zona no validada')
+        require(not envelope_changes,'E_SOLAR_SCOPE','Mejora combinada con otros cambios no validada')
+        require(len(general)>=10 and general[4]=='D2','E_SOLAR_SCOPE','Zona climatica distinta de la ensayada (D2)')
+        require(len(systems[0])==1 and not systems[4] and not systems[5] and not systems[6],
+                'E_SOLAR_SCOPE','Combinacion de instalaciones o contribuciones no validada')
+        acs=systems[0][0]
+        require(acs[1]=='ACS' and acs[3]=='Efecto Joule' and acs[4]=='Electricidad'
+                and str(acs[6]).startswith('Conocido') and acs[-1]=='Edificio Objeto',
+                'E_SOLAR_SCOPE','Solo se ha ensayado ACS electrico de efecto Joule conocido')
+        require(as_num(acs[2][0],'solar.rendimiento')==100 and as_num(acs[5][0][1],'solar.cobertura')==100,
+                'E_SOLAR_SCOPE','Rendimiento y cobertura deben ser 100 %')
+        require(isinstance(acs[8],list) and acs[8] and acs[8][0] is False,
+                'E_SOLAR_SCOPE','No se ha validado ACS con acumulacion')
+        flow=as_num(general[9],'solar.ACS',minimum=0)
+        require(flow>0 and as_num(general[6],'solar.area',minimum=0)>0,'E_SOLAR_SCOPE','Demanda o superficie nula')
+        demand=360*4.18*flow*(60-11.7)/3600
+        production=sum(as_num(s[m],'solar.'+m,minimum=0) for m in SOLAR_MONTHS)
+        as_num(s['potencia'],'solar.potencia',minimum=0)
+        require(0<production<=demand,'E_SOLAR_SCOPE','Produccion nula o superior a la demanda anual; caso no validado')
+        return {'percent':production/demand*100,'production':production,'demand':demand},''
+    except (ConversionError,KeyError,TypeError,IndexError) as exc:
+        return None,str(exc)
+
+
+def solar_issues(source):
+    issues=[]
+    contexts=[('edificio',source[4],source[2],False)]
+    for i,m in enumerate(source[5]):
+        if not isinstance(m,CexObject):continue
+        defs=m.state.get('mejoras')
+        if isinstance(defs,list) and len(defs)==2 and isinstance(defs[1],list) and len(defs[1])==3:
+            contexts.append((f'mejora {i+1}: '+str(m.state.get('nombre','')),defs[1][1],source[2],bool(defs[0])))
+    for context,systems,general,changed in contexts:
+        if not isinstance(systems,list) or len(systems)!=14 or not systems[12]:continue
+        candidate,reason=solar_candidate(systems[12],systems,general,changed)
+        if context=='edificio' and source[5]:
+            candidate,reason=None,'Solar del edificio combinada con mejoras: configuracion aun no ensayada'
+        for generator in systems[12]:
+            key=solar_key(generator)
+            require(all(item['id']!=key for item in issues),'E_SOLAR_SCHEMA',
+                    'Un generador se comparte entre contextos; se requiere revision manual')
+            name=str(generator.state.get('nombre','Generador solar'))
+            desc=f'{context}: {name}. '
+            if candidate:
+                desc+=(f"Produccion {candidate['production']:.6g} kWh/ano. Se propone cobertura ACS "
+                       f"{candidate['percent']:.8g} %. Se pierden reparto mensual y potencia solar. "
+                       'Adaptacion ensayada solo con ACS electrico sin acumulacion, zona D2. ')
+            else:desc+='Adaptacion no validada: '+reason+'. '
+            desc+=('Omitir elimina esta instalacion solar de la salida. ' if context=='edificio' else
+                   'Omitir elimina TODO este conjunto de mejora, incluidos sus costes y otras actuaciones. ')
+            desc+='Revisar y recalcular en CE3X 2.3. El original se conserva.'
+            issues.append({'id':key,'name':name,'context':context,'candidate':candidate,'message':desc})
+    return issues
+
+
+def resolve_solar(source, choices, audit, manifest):
+    issues=solar_issues(source)
+    choices=choices or {}
+    known={item['id']:item for item in issues}
+    require(not set(choices)-set(known),'E_SOLAR_DECISION','La seleccion ya no coincide con el archivo')
+    for issue in issues:
+        choice=choices.get(issue['id'])
+        if choice is None:
+            manifest['pending_solar']=issue
+            raise ConversionError('E_SOLAR_DECISION',issue['message'],issue['id'])
+        require(choice in ('adapt','omit'),'E_SOLAR_DECISION','Decision solar desconocida')
+        require(choice!='adapt' or issue['candidate'] is not None,'E_SOLAR_SCOPE','Esta adaptacion no esta validada')
+    if not issues:return source
+    out=copy.deepcopy(source)
+    manifest['solar_decisions']=[dict(item,choice=choices[item['id']]) for item in issues]
+    def row(item):
+        return [item['name']+' (adaptado 2.3)',LegacyString('Contribuciones energéticas'),
+                [format(item['candidate']['percent'],'.12g'),'0','0',False],['']*6,[True,False],'Edificio Objeto']
+    added=set()
+    def contributions(rows,generators):
+        for g in generators:
+            key=solar_key(g)
+            require(key in known,'E_SOLAR_SCHEMA','Generador almacenado sin declaracion coincidente')
+            item=known[key]
+            if choices[key]=='adapt' and (id(rows),key) not in added:
+                new=row(item)
+                require(all(r[0]!=new[0] for r in rows),'E_SOLAR_SCHEMA','Nombre de contribucion duplicado')
+                rows.append(new);added.add((id(rows),key))
+    def matrix(systems):
+        if isinstance(systems,list) and len(systems)==14 and systems[12]:
+            contributions(systems[6],systems[12]);systems[12]=[]
+    # Omission of a measure is explicit and includes its dependent report/cost references.
+    removed=[];kept=[]
+    for m in out[5]:
+        generators=m.state.get('listadoGeneradoresTermosolarMM',[])
+        if any(choices.get(solar_key(g))=='omit' for g in generators):removed.append(m.state['nombre'])
+        else:kept.append(m)
+    out[5]=kept
+    if removed:
+        require(isinstance(out[6],list) and len(out[6])==4,'E_ECONOMIC','Analisis economico desconocido')
+        out[6][2]=[r for r in out[6][2] if len(r)<2 or r[1] not in removed]
+        out[11]=['' if isinstance(v,str) and v in removed else v for v in out[11]]
+    seen=set()
+    def visit(value):
+        if id(value) in seen:return
+        if isinstance(value,(CexObject,list,dict,tuple)):seen.add(id(value))
+        if isinstance(value,CexObject):
+            state=value.state
+            if 'datosInstalaciones' in state:matrix(state['datosInstalaciones'])
+            if value.cls==GlobalRef('MedidasDeMejora.objetoGrupoMejoras','grupoMedidasMejora'):
+                matrix(state['mejoras'][1][1])
+                generators=state.get('listadoGeneradoresTermosolarMM',[])
+                if generators:contributions(state['sistemasContribucionesMM'],generators);state['listadoGeneradoresTermosolarMM']=[]
+            if 'listadoGeneradoresTermosolar' in state and state['listadoGeneradoresTermosolar']:
+                contributions(state['sistemasContribuciones'],state['listadoGeneradoresTermosolar'])
+                state['listadoGeneradoresTermosolar']=[]
+            for val in list(state.values()):visit(val)
+        elif isinstance(value,dict):
+            for val in list(value.values()):visit(val)
+        elif isinstance(value,(list,tuple)):
+            for val in list(value):visit(val)
+    matrix(out[4]);visit(out)
+    for issue in issues:
+        choice=choices[issue['id']]
+        audit.omit(issue['context']+'.solar',issue,'Decision explicita: '+choice)
+        audit.event('WARNING','W_SOLAR_'+choice.upper(),issue['message'],choice=choice)
+    manifest['results_require_recalculation']=True
+    return out
+
+
 def transfer(source, template, profile, audit, fix_accents=True):
     audit.stage='adaptar estructuras'
     require(len(source[1])==29 and len(source[2])==26, 'E_SOURCE_SCHEMA',
@@ -627,7 +775,7 @@ def transfer(source, template, profile, audit, fix_accents=True):
     out[4]=adapt_systems(source[4],audit,profile)
     require(len(source[6])==4,'E_ECONOMIC','Formato economico de origen desconocido')
     out[5],out[6]=convert_measures(source[5],source[6],profile,audit)
-    require(len(out[11]) in (7,8),'E_REPORT_FIELDS','Configuracion de informe desconocida')
+    require(len(out[11]) in (0,7,8),'E_REPORT_FIELDS','Configuracion de informe desconocida')
     if len(out[11])==8:
         require(empty(out[11][7]),'E_REPORT_FIELDS','Campo adicional de informe activo sin equivalencia 2.3','informe[7]')
         audit.omit('informe[7]',out[11][7],'Campo adicional vacio de 3.2')
@@ -790,7 +938,7 @@ def publish_file(temporary, destination, overwrite=False):
         temporary.unlink()
 
 
-def convert(source, template, profile_path=None, fix_accents=True, overwrite=False):
+def convert(source, template, profile_path=None, fix_accents=True, overwrite=False, solar_choices=None, expected_source_sha=None):
     source, template = Path(source).resolve(), Path(template).resolve()
     destination = output_path(source)
     audit = Audit()
@@ -803,6 +951,8 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
     temporary = None
     try:
         audit.stage = 'comprobar entradas'
+        if expected_source_sha is not None:
+            require(sha(source)==expected_source_sha,'E_INPUT_CHANGED','El archivo ha cambiado despues de solicitar la decision')
         require(source.is_file(), 'E_SOURCE', 'No existe el archivo de origen', str(source))
         require(template.is_file(), 'E_TEMPLATE', 'No existe la plantilla 2.3', str(template))
         require(destination not in (source, template), 'E_OVERWRITE', 'La salida coincide con una entrada')
@@ -816,6 +966,8 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
                         profile_sha256=hashlib.sha256(profile_bytes).hexdigest(),
                         profile_version=profile['profile_version'],
                         improvements_schema_sha256=hashlib.sha256(schema_bytes).hexdigest())
+        if expected_source_sha is not None:
+            require(manifest['source_sha256']==expected_source_sha,'E_INPUT_CHANGED','El origen ha cambiado durante la comprobacion')
         attempt.artifacts.update({'perfil_utilizado.json': profile_bytes,
                                   'esquema_mejoras_23.json': schema_bytes,
                                   'motor_utilizado.py': Path(__file__).read_bytes()})
@@ -831,6 +983,8 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
         attempt.artifacts['modelo_origen_tecnico.json'] = json_text(technical_snapshot(src))
         src = repair_text(src, audit, 'blocks')
         validate(src, audit, profile)
+        require(sha(source)==manifest['source_sha256'],'E_INPUT_CHANGED','El origen ha cambiado durante la lectura')
+        src = resolve_solar(src, solar_choices, audit, manifest)
         dst = transfer(src, native, profile, audit, fix_accents)
         validate(dst, audit, profile, target=True)
         check_preservation(src, dst, fix_accents)
@@ -859,6 +1013,9 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
                         cached_results_origin_version='3.2', target_results_recalculated=False)
         audit.event('INFO', 'ROUNDTRIP_OK', '15 bloques releidos; clases, acentos, valores y tipos conservados')
         status, exit_code = 'REVISAR', 0
+        if manifest.get('solar_decisions'):
+            actions=['Adaptado: '+x['name'] if x['choice']=='adapt' else 'Omitido: '+x['context']+' / '+x['name'] for x in manifest['solar_decisions']]
+            manifest['decision_summary']='; '.join(actions)
         attempt.summary = (f'Archivo generado. {len(dst[3][0])} cerramientos, {len(dst[3][1])} huecos, '
                            f'{len(dst[3][2])} puentes y {len(dst[5])} conjuntos de mejora. '
                            'Revisar y recalcular en CE3X 2.3.')
@@ -866,6 +1023,8 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
         code, path = (exc.code, exc.path) if isinstance(exc, ConversionError) else ('E_UNEXPECTED', '')
         audit.event('ERROR', code, str(exc), path=path, exception_type=type(exc).__name__)
         attempt.traceback_text = traceback.format_exc()
+        if code=='E_SOLAR_DECISION' and 'pending_solar' in manifest:
+            status, exit_code='DECISION',2
         manifest.update(structural_validation=False, error_code=code, error_path=path,
                         error_message=str(exc), error_stage=audit.stage)
         attempt.summary = code + ': ' + str(exc)
@@ -880,6 +1039,7 @@ def serve(stream_in=None, stream_out=None):
     """Keep the last attempt in memory until the GUI requests an export or closes."""
     stream_in, stream_out = stream_in or sys.stdin, stream_out or sys.stdout
     last_attempt = None
+    pending = None
     def reply(status, path, message):
         clean = lambda text: str(text).replace('\t', ' ').replace('\r', ' ').replace('\n', ' ')
         stream_out.write('\t'.join(map(clean, (status, path, message))) + '\n')
@@ -890,10 +1050,34 @@ def serve(stream_in=None, stream_out=None):
             command = request['command']
             if command == 'exit':
                 return
-            if command == 'convert':
-                code, last_attempt = convert(request['source'], request.get('template', ROOT / 'plantilla_23.cex'),
-                                             overwrite=request.get('overwrite', False))
-                reply(last_attempt.manifest['status'], last_attempt.output if not code else '', last_attempt.summary)
+            if command in ('convert','decision'):
+                if command=='convert':
+                    pending=dict(request,solar_choices={})
+                    pending['source_sha']=sha(Path(request['source']))
+                else:
+                    require(pending is not None and last_attempt is not None,'E_RUN','No hay una decision pendiente')
+                    issue=last_attempt.manifest.get('pending_solar')
+                    require(issue is not None and request.get('id')==issue['id'],'E_SOLAR_DECISION','Decision caducada')
+                    if request.get('choice')=='cancel':
+                        pending=None;last_attempt=None
+                        reply('CANCELADO','','Conversion cancelada. No se ha generado ningun archivo.')
+                        continue
+                    require(request.get('choice') in ('adapt','omit'),'E_SOLAR_DECISION','Seleccion desconocida')
+                    pending['solar_choices'][issue['id']]=request['choice']
+                code,last_attempt=convert(pending['source'],pending.get('template',ROOT/'plantilla_23.cex'),
+                                          overwrite=pending.get('overwrite',False),
+                                          solar_choices=pending['solar_choices'],expected_source_sha=pending['source_sha'])
+                if code==2:
+                    issue=last_attempt.manifest['pending_solar']
+                    reply('DECISION_ADAPT' if issue['candidate'] else 'DECISION_OMIT',issue['id'],issue['message'])
+                else:
+                    status=last_attempt.manifest['status']
+                    message=last_attempt.summary
+                    if not code and last_attempt.manifest.get('solar_decisions'):
+                        status='REVISAR_CAMBIOS'
+                        message=last_attempt.manifest['decision_summary']+'. Revisar y recalcular en CE3X 2.3 antes de usar los resultados.'
+                    reply(status,last_attempt.output if not code else '',message)
+                    pending=None
             elif command == 'diagnostic':
                 require(last_attempt is not None, 'E_RUN', 'Primero realiza una conversion')
                 path = last_attempt.export_diagnostic(request['destination'], request.get('notes', ''),
@@ -935,6 +1119,7 @@ def main(argv=None):
     p.add_argument('--template', default=str(ROOT / 'plantilla_23.cex'))
     p.add_argument('--profile')
     p.add_argument('--overwrite', action='store_true', help='Sustituir expresamente una salida existente')
+    p.add_argument('--solar-choice', action='append', default=[], metavar='ID=adapt|omit', help='Decision explicita para cada generador indicado por el analisis previo')
     p.add_argument('--diagnostic', help='Guardar un ZIP de diagnostico expresamente en esta ruta')
     p.add_argument('--fix-accents', action='store_true', default=True, help=argparse.SUPPRESS)
     sub.add_parser('self-test')
@@ -947,10 +1132,15 @@ def main(argv=None):
         if a.command == 'serve':
             serve()
             return 0
-        code, attempt = convert(a.source, a.template, a.profile, a.fix_accents, a.overwrite)
+        choices=dict(item.split('=',1) for item in a.solar_choice)
+        code, attempt = convert(a.source, a.template, a.profile, a.fix_accents, a.overwrite, solar_choices=choices)
         print(attempt.summary)
+        if code==2:
+            issue=attempt.manifest['pending_solar']
+            print('ID: '+issue['id']+'; adaptar disponible: '+str(issue['candidate'] is not None))
         if not code:
             print(attempt.output)
+            if attempt.manifest.get('decision_summary'):print(attempt.manifest['decision_summary'])
         if a.diagnostic:
             print(attempt.export_diagnostic(a.diagnostic))
         return code
