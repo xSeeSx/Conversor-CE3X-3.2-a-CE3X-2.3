@@ -14,7 +14,7 @@ import converter as c
 
 class ConverterTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
+        self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name).resolve()
         self.template=c.read_cex(c.ROOT/'plantilla_23.cex')
         self.profile=json.loads((c.ROOT/'profile.json').read_text(encoding='utf-8'))
         self.src=copy.deepcopy(self.template)
