@@ -2,7 +2,13 @@
 
 Las versiones publicadas y sus descargas están en [Releases](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases).
 
-## 1.4.0, en desarrollo
+## 1.4.0, 2026-11-17
+
+### Interfaz
+
+- Nuevo estilo técnico compacto: gris claro, controles rectos y acento índigo.
+- Notas y adjunto en un panel desplegable.
+- Escalado de la ventana y los controles según la configuración DPI de Windows.
 
 ### Cambios de uso
 
@@ -20,7 +26,7 @@ Las versiones publicadas y sus descargas están en [Releases](https://github.com
 - Pruebas de salida, sobrescritura, diagnóstico a petición y comunicación persistente.
 - Comprobación de compilación e integración nativa Windows en GitHub Actions.
 
-El rediseño visual está pendiente de elección. Esta versión todavía no tiene una release pública.
+Se mantiene la necesidad de revisar y recalcular los resultados en CE3X 2.3.
 
 ## 1.3.0
 

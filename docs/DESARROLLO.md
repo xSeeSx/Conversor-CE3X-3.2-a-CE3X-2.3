@@ -1,6 +1,6 @@
 # Desarrollo
 
-Esta guía corresponde a la versión 1.4.0 en desarrollo. La release publicada 1.3.0 conserva su comportamiento original.
+Esta guía corresponde a la versión 1.4.0. La interfaz nativa utiliza el estilo técnico compacto, con controles escalados según los DPI de Windows.
 
 ## Ejecutar el motor
 
@@ -48,7 +48,9 @@ La conversión escribe un archivo temporal únicamente para releer y verificar l
 
 ## Pruebas y publicación
 
-GitHub Actions ejecuta las pruebas con Python 3.11, compila en Windows, repite las pruebas con Python embebido y verifica la comunicación entre el ejecutable y el motor. La compilación queda como artefacto de prueba, no se publica automáticamente en Releases.
+GitHub Actions ejecuta las pruebas con Python 3.11, compila en Windows, repite las pruebas con Python embebido y verifica la comunicación entre el ejecutable y el motor. El paquete portátil y una captura de la interfaz quedan como artefactos de la comprobación; no se publican automáticamente en Releases.
+
+Después de compilar y preparar `runtime/`, `python scripts/empaquetar.py` crea el ZIP público y su SHA256 en `_release/`. La selección de archivos excluye proyectos particulares. `Conversor_CE3X.exe --preview vista.bmp` permite revisar el aspecto de la interfaz nativa.
 
 La apertura y el recálculo en CE3X 2.3 requieren validación manual. Una compilación y sus pruebas correctas no acreditan la validez energética de la conversión.
 

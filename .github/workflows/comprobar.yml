@@ -51,12 +51,23 @@ jobs:
           if ($process.ExitCode -ne 0 -or (Get-Content $resultPath -Raw).Trim() -ne 'OK') {
             throw 'Fallo de comunicacion entre el ejecutable y Python.'
           }
-      - name: Conservar compilacion de prueba
+      - name: Crear paquete portatil
+        shell: pwsh
+        run: python -B scripts/empaquetar.py
+      - name: Capturar interfaz nativa
+        shell: pwsh
+        run: |
+          $bitmapPath = "$pwd/_release/vista_previa.bmp"
+          $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--preview', $bitmapPath) -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw 'No se pudo capturar la interfaz.' }
+          Add-Type -AssemblyName System.Drawing
+          $image = [System.Drawing.Image]::FromFile($bitmapPath)
+          try { $image.Save("$pwd/_release/vista_previa.png", [System.Drawing.Imaging.ImageFormat]::Png) }
+          finally { $image.Dispose() }
+          Remove-Item $bitmapPath
+      - name: Conservar paquete y vista previa
         uses: actions/upload-artifact@v4
         with:
-          name: Conversor_CE3X_1_4_0_prueba
-          path: |
-            Conversor_CE3X.exe
-            app/
-            runtime/
+          name: Conversor_CE3X_1_4_0_artefactos
+          path: _release/*
           retention-days: 14

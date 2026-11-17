@@ -3,6 +3,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commdlg.h>
+#include <commctrl.h>
 #include <shellapi.h>
 #include <stdio.h>
 #include <wchar.h>
@@ -19,9 +20,29 @@
 #define IDC_ATTACHMENT 106
 #define IDC_NOTES 107
 #define IDC_HELP 108
+#define IDC_DETAILS 109
+#define IDC_REPORT 110
+#define IDC_TITLE 111
+#define IDC_VERSION 112
+#define IDC_INPUT_LABEL 113
+#define IDC_OUTPUT_LABEL 114
+#define IDC_OUTPUT_NAME 115
+#define IDC_OUTPUT_HELP 116
+#define IDC_NOTICE 117
+#define IDC_NOTES_LABEL 118
+#define IDC_ATTACHMENT_LABEL 119
+#define IDC_RETENTION 120
+#define UI_BACKGROUND RGB(245, 246, 249)
+#define UI_HEADER RGB(234, 237, 247)
+#define UI_BORDER RGB(204, 210, 223)
+#define UI_TEXT RGB(32, 38, 50)
+#define UI_ACCENT RGB(58, 69, 154)
 
 static HWND window, sourceEdit, outputLabel, convertButton, diagnosticButton, openButton, notesEdit, reportEdit, attachmentLabel;
-static HFONT font;
+static HFONT font, titleFont, strongFont, smallFont;
+static HBRUSH backgroundBrush, panelBrush, headerBrush;
+static HWND detailControls[6];
+static int detailCount, detailsVisible, uiDpi = 96;
 static WCHAR baseDir[PATHCAP], lastOutput[PATHCAP], attachedPath[PATHCAP], lastReport[PATHCAP + 8192];
 static HANDLE engineInput, engineOutput;
 static PROCESS_INFORMATION engine;
@@ -49,7 +70,8 @@ static void setBusy(int value) {
 }
 static void outputName(const WCHAR *source, WCHAR *output) {
     wcsncpy(output, source, PATHCAP - 1); output[PATHCAP - 1] = 0;
-    WCHAR *slash = wcsrchr(output, L'\\'), *dot = wcsrchr(output, L'.');
+    WCHAR *slash = wcsrchr(output, L'\\'), *forward = wcsrchr(output, L'/'), *dot = wcsrchr(output, L'.');
+    if (forward && (!slash || forward > slash)) slash = forward;
     if (dot && (!slash || dot > slash)) *dot = 0;
     if (wcslen(output) + 13 < PATHCAP) wcscat(output, L"_CE3X2.3.cex");
     else output[0] = 0;
@@ -58,7 +80,9 @@ static void updateOutput(void) {
     WCHAR source[PATHCAP], output[PATHCAP];
     GetWindowTextW(sourceEdit, source, PATHCAP);
     outputName(source, output);
-    SetWindowTextW(outputLabel, source[0] ? output : L"Se guardara junto al original como nombre_CE3X2.3.cex");
+    const WCHAR *name = wcsrchr(output, L'\\'), *forward = wcsrchr(output, L'/');
+    if (forward && (!name || forward > name)) name = forward;
+    SetWindowTextW(outputLabel, source[0] ? (name ? name + 1 : output) : L"nombre_CE3X2.3.cex");
 }
 // CreateProcessW arguments are quoted directly; no command shell is involved.
 static int addArg(WCHAR *command, size_t capacity, const WCHAR *value) {
@@ -159,7 +183,7 @@ static void received(void) {
     if (operation == 1) {
         hasAttempt = 1;
         wcsncpy(lastOutput, path, PATHCAP - 1); lastOutput[PATHCAP - 1] = 0;
-        swprintf(text, PATHCAP + 8192, L"%ls\r\n\r\n%ls\r\n\r\nSi aparece un error, pulsa Guardar diagnostico. La informacion se conserva en memoria hasta cerrar el programa o hacer otra conversion.", message, path);
+        swprintf(text, PATHCAP + 8192, L"%ls\r\n%ls", message, path);
     } else if (operation == 2) {
         swprintf(text, PATHCAP + 8192, L"%ls\r\n\r\n%ls", message, path);
     } else {
@@ -223,34 +247,146 @@ static void saveDiagnostic(void) {
     if (attachedPath[0]) { wcscat(json, L",\"attachment\":"); if (!appendJson(json, attachedPath)) return; }
     wcscat(json, L",\"overwrite\":true}"); request(json, 2);
 }
+static int px(int value) { return MulDiv(value, uiDpi, 96); }
+static RECT box(int x, int y, int width, int height) {
+    RECT result = {px(x), px(y), px(x + width), px(y + height)}; return result;
+}
+static void fillBox(HDC dc, RECT rect, COLORREF color) {
+    HBRUSH brush = CreateSolidBrush(color); FillRect(dc, &rect, brush); DeleteObject(brush);
+}
+static void frameBox(HDC dc, RECT rect, COLORREF color) {
+    HBRUSH brush = CreateSolidBrush(color); FrameRect(dc, &rect, brush); DeleteObject(brush);
+}
+static HFONT makeFont(int size, int weight) {
+    return CreateFontW(-px(size), 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+}
+static void paintWindow(HDC dc) {
+    RECT client; GetClientRect(window, &client); fillBox(dc, client, UI_BACKGROUND);
+    fillBox(dc, box(20, 20, 720, 70), UI_HEADER);
+    frameBox(dc, box(20, 20, 720, 70), UI_BORDER);
+    fillBox(dc, box(20, 108, 720, 126), RGB(255, 255, 255));
+    frameBox(dc, box(20, 108, 720, 126), UI_BORDER);
+    fillBox(dc, box(612, 39, 112, 30), RGB(220, 225, 247));
+    frameBox(dc, box(612, 39, 112, 30), RGB(196, 203, 231));
+    SetBkMode(dc, TRANSPARENT); SetTextColor(dc, UI_ACCENT);
+    HFONT oldFont = SelectObject(dc, strongFont);
+    RECT badge = box(612, 39, 112, 30);
+    DrawTextW(dc, L"3.2 \x2192 2.3", -1, &badge, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    SelectObject(dc, oldFont);
+    fillBox(dc, box(20, 306, 720, 1), UI_BORDER);
+    if (detailsVisible) {
+        fillBox(dc, box(20, 438, 720, 172), RGB(255, 255, 255));
+        frameBox(dc, box(20, 438, 720, 172), UI_BORDER);
+    }
+}
+static void drawButton(const DRAWITEMSTRUCT *item) {
+    int primary = item->CtlID == IDC_CONVERT;
+    int disabled = (item->itemState & ODS_DISABLED) != 0;
+    int pressed = (item->itemState & ODS_SELECTED) != 0;
+    COLORREF background = primary ? UI_ACCENT : RGB(250, 251, 253);
+    if (pressed) background = primary ? RGB(43, 53, 125) : RGB(227, 231, 240);
+    if (disabled) background = primary ? RGB(173, 180, 210) : RGB(239, 241, 245);
+    fillBox(item->hDC, item->rcItem, background);
+    frameBox(item->hDC, item->rcItem, primary ? background : UI_BORDER);
+    SetBkMode(item->hDC, TRANSPARENT);
+    SetTextColor(item->hDC, primary ? RGB(255, 255, 255) : (disabled ? RGB(150, 156, 169) : UI_TEXT));
+    HFONT old = SelectObject(item->hDC, primary ? strongFont : font);
+    WCHAR text[128]; GetWindowTextW(item->hwndItem, text, 128);
+    RECT label = item->rcItem;
+    if (pressed) OffsetRect(&label, px(1), px(1));
+    DrawTextW(item->hDC, text, -1, &label, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    if ((item->itemState & ODS_FOCUS) && !disabled) {
+        RECT focus = item->rcItem; InflateRect(&focus, -px(4), -px(4)); DrawFocusRect(item->hDC, &focus);
+    }
+    SelectObject(item->hDC, old);
+}
 static HWND control(const WCHAR *className, const WCHAR *text, DWORD style, int x, int y, int width, int height, int id) {
-    HWND item = CreateWindowExW(wcscmp(className, L"EDIT") == 0 ? WS_EX_CLIENTEDGE : 0, className, text,
-        WS_CHILD | WS_VISIBLE | style, x, y, width, height, window, (HMENU)(INT_PTR)id, GetModuleHandleW(NULL), NULL);
+    if (wcscmp(className, L"BUTTON") == 0) style = (style & ~BS_TYPEMASK) | BS_OWNERDRAW;
+    if (wcscmp(className, L"EDIT") == 0 && id != IDC_REPORT) style |= WS_BORDER;
+    HWND item = CreateWindowExW(0, className, text, WS_CHILD | WS_VISIBLE | style,
+        px(x), px(y), px(width), px(height), window, (HMENU)(INT_PTR)id, GetModuleHandleW(NULL), NULL);
     SendMessageW(item, WM_SETFONT, (WPARAM)font, TRUE); return item;
 }
+static void toggleDetails(void) {
+    detailsVisible = !detailsVisible;
+    for (int i = 0; i < detailCount; i++) ShowWindow(detailControls[i], detailsVisible ? SW_SHOW : SW_HIDE);
+    SetWindowTextW(GetDlgItem(window, IDC_DETAILS), detailsVisible ? L"- Notas y adjunto" : L"+ Notas y adjunto");
+    RECT rect = box(0, 0, 760, detailsVisible ? 630 : 438);
+    AdjustWindowRect(&rect, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, FALSE);
+    SetWindowPos(window, NULL, 0, 0, rect.right - rect.left, rect.bottom - rect.top,
+        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    InvalidateRect(window, NULL, TRUE);
+}
 static void initializeUI(void) {
-    font = CreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-    control(L"STATIC", L"Conversor CE3X 3.2 a 2.3", 0, 24, 20, 700, 28, 0);
-    control(L"STATIC", L"Version 1.4.0 | Residencial | Conversion experimental", 0, 24, 55, 800, 24, 0);
-    control(L"STATIC", L"Archivo de origen CE3X 3.2", 0, 24, 100, 750, 24, 0);
-    sourceEdit = control(L"EDIT", L"", ES_AUTOHSCROLL | WS_TABSTOP, 24, 130, 660, 30, IDC_SOURCE);
-    control(L"BUTTON", L"Examinar...", WS_TABSTOP, 700, 130, 135, 30, IDC_BROWSE);
-    control(L"STATIC", L"Archivo de salida", 0, 24, 182, 750, 24, 0);
-    outputLabel = control(L"STATIC", L"Se guardara junto al original como nombre_CE3X2.3.cex", SS_PATHELLIPSIS, 24, 212, 810, 40, 0);
-    convertButton = control(L"BUTTON", L"Convertir", BS_DEFPUSHBUTTON | WS_TABSTOP, 24, 272, 235, 40, IDC_CONVERT);
-    openButton = control(L"BUTTON", L"Abrir carpeta del archivo", WS_TABSTOP, 275, 272, 270, 40, IDC_OPEN);
-    control(L"BUTTON", L"Instrucciones", WS_TABSTOP, 700, 272, 135, 40, IDC_HELP);
-    reportEdit = control(L"EDIT", L"Selecciona o arrastra un archivo .cex.\r\nSe conserva el original. Revisa y recalcula el resultado en CE3X 2.3.\r\nLos logs solo se guardan cuando lo solicitas.", ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL | WS_TABSTOP, 24, 340, 810, 145, 0);
-    control(L"STATIC", L"Si aparece un error, describe que estabas haciendo (opcional)", 0, 24, 510, 800, 24, 0);
-    notesEdit = control(L"EDIT", L"", ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | WS_TABSTOP, 24, 540, 810, 70, IDC_NOTES);
-    SendMessageW(notesEdit, EM_SETLIMITTEXT, 8191, 0);
-    control(L"BUTTON", L"Adjuntar log o captura...", WS_TABSTOP, 24, 625, 235, 35, IDC_ATTACHMENT);
-    attachmentLabel = control(L"STATIC", L"Sin adjunto", SS_PATHELLIPSIS, 275, 631, 555, 25, 0);
-    diagnosticButton = control(L"BUTTON", L"Guardar diagnostico...", WS_TABSTOP, 24, 680, 235, 40, IDC_DIAGNOSTIC);
-    control(L"STATIC", L"Solo se crea un ZIP al pulsar el boton.\r\nRevisalo antes de compartirlo.", 0, 275, 680, 550, 45, 0);
+    HDC dc = GetDC(window); uiDpi = GetDeviceCaps(dc, LOGPIXELSX); ReleaseDC(window, dc);
+    font = makeFont(15, FW_NORMAL); titleFont = makeFont(25, FW_SEMIBOLD);
+    strongFont = makeFont(15, FW_SEMIBOLD); smallFont = makeFont(13, FW_NORMAL);
+    backgroundBrush = CreateSolidBrush(UI_BACKGROUND); panelBrush = CreateSolidBrush(RGB(255, 255, 255));
+    headerBrush = CreateSolidBrush(UI_HEADER);
+    HWND title = control(L"STATIC", L"Conversor CE3X", SS_CENTERIMAGE, 36, 31, 420, 33, IDC_TITLE);
+    SendMessageW(title, WM_SETFONT, (WPARAM)titleFont, TRUE);
+    HWND version = control(L"STATIC", L"v1.4.0  |  Residencial", 0, 37, 66, 420, 18, IDC_VERSION);
+    SendMessageW(version, WM_SETFONT, (WPARAM)smallFont, TRUE);
+    control(L"STATIC", L"Archivo de entrada", SS_CENTERIMAGE, 36, 123, 140, 30, IDC_INPUT_LABEL);
+    sourceEdit = control(L"EDIT", L"", ES_AUTOHSCROLL | WS_TABSTOP, 182, 123, 403, 30, IDC_SOURCE);
+    SendMessageW(sourceEdit, EM_SETCUEBANNER, 0, (LPARAM)L"Selecciona o arrastra un archivo .cex");
+    control(L"BUTTON", L"Examinar...", WS_TABSTOP, 597, 123, 127, 30, IDC_BROWSE);
+    control(L"STATIC", L"Archivo de salida", SS_CENTERIMAGE, 36, 168, 140, 26, IDC_OUTPUT_LABEL);
+    outputLabel = control(L"STATIC", L"nombre_CE3X2.3.cex", SS_PATHELLIPSIS | SS_CENTERIMAGE, 182, 168, 542, 26, IDC_OUTPUT_NAME);
+    SendMessageW(outputLabel, WM_SETFONT, (WPARAM)strongFont, TRUE);
+    HWND helper = control(L"STATIC", L"Se guarda junto al original", 0, 182, 198, 542, 20, IDC_OUTPUT_HELP);
+    SendMessageW(helper, WM_SETFONT, (WPARAM)smallFont, TRUE);
+    convertButton = control(L"BUTTON", L"Convertir", WS_TABSTOP, 20, 254, 190, 40, IDC_CONVERT);
+    diagnosticButton = control(L"BUTTON", L"Guardar diagnóstico", WS_TABSTOP, 226, 254, 216, 40, IDC_DIAGNOSTIC);
+    openButton = control(L"BUTTON", L"Abrir carpeta", WS_TABSTOP, 458, 254, 188, 40, IDC_OPEN);
+    control(L"BUTTON", L"Ayuda", WS_TABSTOP, 662, 254, 78, 40, IDC_HELP);
+    reportEdit = control(L"EDIT", L"Selecciona un archivo de CE3X 3.2 para comenzar.\r\nEl original se conserva. No se crean logs automáticamente.",
+        ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL | WS_TABSTOP, 20, 322, 720, 60, IDC_REPORT);
+    HWND notice = control(L"STATIC", L"Revisa y recalcula el resultado en CE3X 2.3.", SS_CENTERIMAGE, 20, 394, 520, 26, IDC_NOTICE);
+    SendMessageW(notice, WM_SETFONT, (WPARAM)smallFont, TRUE);
+    control(L"BUTTON", L"+ Notas y adjunto", WS_TABSTOP, 570, 392, 170, 30, IDC_DETAILS);
+    detailControls[detailCount++] = control(L"STATIC", L"Información opcional para el diagnóstico", 0, 36, 452, 688, 23, IDC_NOTES_LABEL);
+    notesEdit = control(L"EDIT", L"", ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | WS_TABSTOP, 36, 482, 688, 54, IDC_NOTES);
+    detailControls[detailCount++] = notesEdit; SendMessageW(notesEdit, EM_SETLIMITTEXT, 8191, 0);
+    detailControls[detailCount++] = control(L"BUTTON", L"Adjuntar log o captura", WS_TABSTOP, 36, 548, 210, 30, IDC_ATTACHMENT);
+    attachmentLabel = control(L"STATIC", L"Sin adjunto", SS_PATHELLIPSIS | SS_CENTERIMAGE, 260, 548, 464, 30, IDC_ATTACHMENT_LABEL);
+    detailControls[detailCount++] = attachmentLabel;
+    HWND retention = control(L"STATIC", L"Guarda el diagnóstico antes de cerrar o convertir otro archivo.", 0, 36, 587, 688, 18, IDC_RETENTION);
+    SendMessageW(retention, WM_SETFONT, (WPARAM)smallFont, TRUE); detailControls[detailCount++] = retention;
+    for (int i = 0; i < detailCount; i++) ShowWindow(detailControls[i], SW_HIDE);
     setBusy(0); DragAcceptFiles(window, TRUE);
 }
+
+// Render the real native window for CI review without invoking the conversion engine.
+static int savePreview(const WCHAR *path) {
+    RECT rect; GetWindowRect(window, &rect);
+    int width = rect.right - rect.left, height = rect.bottom - rect.top;
+    HDC screen = GetDC(window), memory = CreateCompatibleDC(screen);
+    HBITMAP bitmap = CreateCompatibleBitmap(screen, width, height);
+    if (!memory || !bitmap) { if (memory) DeleteDC(memory); if (bitmap) DeleteObject(bitmap); ReleaseDC(window, screen); return 0; }
+    HGDIOBJ old = SelectObject(memory, bitmap);
+    BOOL painted = PrintWindow(window, memory, 0);
+    SelectObject(memory, old);
+    BITMAPINFO info = {0}; info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = width; info.bmiHeader.biHeight = height;
+    info.bmiHeader.biPlanes = 1; info.bmiHeader.biBitCount = 32; info.bmiHeader.biCompression = BI_RGB;
+    DWORD size = (DWORD)width * (DWORD)height * 4;
+    void *pixels = HeapAlloc(GetProcessHeap(), 0, size); int saved = 0;
+    if (pixels && painted && GetDIBits(screen, bitmap, 0, height, pixels, &info, DIB_RGB_COLORS)) {
+        FILE *file = _wfopen(path, L"wb");
+        if (file) {
+            BITMAPFILEHEADER header = {0}; header.bfType = 0x4d42;
+            header.bfOffBits = sizeof(header) + sizeof(info.bmiHeader); header.bfSize = header.bfOffBits + size;
+            saved = fwrite(&header, sizeof(header), 1, file) == 1 &&
+                fwrite(&info.bmiHeader, sizeof(info.bmiHeader), 1, file) == 1 && fwrite(pixels, size, 1, file) == 1;
+            fclose(file);
+        }
+    }
+    if (pixels) HeapFree(GetProcessHeap(), 0, pixels);
+    DeleteObject(bitmap); DeleteDC(memory); ReleaseDC(window, screen); return saved;
+}
+
 static LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
     switch (message) {
     case WM_CREATE: window = hwnd; initializeUI(); return 0;
@@ -266,8 +402,26 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp
             WCHAR folder[PATHCAP]; wcscpy(folder, lastOutput); WCHAR *slash = wcsrchr(folder, L'\\'); if (slash) *slash = 0;
             ShellExecuteW(hwnd, L"open", folder, NULL, NULL, SW_SHOWNORMAL);
         } break;
+        case IDC_DETAILS: toggleDetails(); break;
         case IDC_HELP: MessageBoxW(hwnd, L"1. Selecciona el CEX 3.2.\r\n2. Pulsa Convertir.\r\n3. Abre nombre_CE3X2.3.cex junto al original.\r\n4. Revisa y recalcula en CE3X 2.3.\r\n\r\nSi aparece un error, guarda el diagnostico antes de cerrar el programa o hacer otra conversion. No se generan logs automaticamente.", L"Instrucciones", MB_OK); break;
         } return 0;
+    case WM_PAINT: {
+        PAINTSTRUCT paint; HDC dc = BeginPaint(hwnd, &paint); paintWindow(dc); EndPaint(hwnd, &paint); return 0;
+    }
+    case WM_PRINTCLIENT: paintWindow((HDC)wp); return 0;
+    case WM_DRAWITEM: drawButton((const DRAWITEMSTRUCT *)lp); return TRUE;
+    case WM_CTLCOLORSTATIC: {
+        HDC dc = (HDC)wp; int id = GetDlgCtrlID((HWND)lp);
+        COLORREF background = UI_BACKGROUND; HBRUSH brush = backgroundBrush;
+        if (id == IDC_TITLE || id == IDC_VERSION) { background = UI_HEADER; brush = headerBrush; }
+        else if ((id >= IDC_INPUT_LABEL && id <= IDC_OUTPUT_HELP) || id == IDC_NOTES_LABEL || id == IDC_ATTACHMENT_LABEL || id == IDC_RETENTION) {
+            background = RGB(255, 255, 255); brush = panelBrush;
+        }
+        SetTextColor(dc, (id == IDC_VERSION || id == IDC_OUTPUT_HELP || id == IDC_NOTICE || id == IDC_RETENTION) ? RGB(91, 100, 118) : UI_TEXT);
+        SetBkColor(dc, background); return (LRESULT)brush;
+    }
+    case WM_CTLCOLOREDIT: SetTextColor((HDC)wp, UI_TEXT); SetBkColor((HDC)wp, RGB(255, 255, 255)); return (LRESULT)panelBrush;
+    case DM_GETDEFID: return MAKELONG(IDC_CONVERT, DC_HASDEFID);
     case WM_TIMER: pollEngine(); return 0;
     case WM_DROPFILES: {
         HDROP drop = (HDROP)wp; WCHAR path[PATHCAP];
@@ -277,12 +431,19 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp
     case WM_CLOSE:
         if (busy) { MessageBoxW(hwnd, L"Espera a que termine la operacion.", L"Conversor CE3X", MB_OK); return 0; }
         DestroyWindow(hwnd); return 0;
-    case WM_DESTROY: closeEngine(); if (font) DeleteObject(font); PostQuitMessage(0); return 0;
+    case WM_DESTROY:
+        closeEngine();
+        if (font) DeleteObject(font); if (titleFont) DeleteObject(titleFont);
+        if (strongFont) DeleteObject(strongFont); if (smallFont) DeleteObject(smallFont);
+        if (backgroundBrush) DeleteObject(backgroundBrush); if (panelBrush) DeleteObject(panelBrush); if (headerBrush) DeleteObject(headerBrush);
+        PostQuitMessage(0); return 0;
     }
     return DefWindowProcW(hwnd, message, wp, lp);
 }
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR commandLine, int show) {
     (void)previous; (void)commandLine;
+    SetProcessDPIAware();
+    HDC desktop = GetDC(NULL); uiDpi = GetDeviceCaps(desktop, LOGPIXELSX); ReleaseDC(NULL, desktop);
     GetModuleFileNameW(NULL, baseDir, PATHCAP);
     WCHAR *slash = wcsrchr(baseDir, L'\\'); if (slash) *slash = 0;
     int argc; WCHAR **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -299,14 +460,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR commandLine, i
     }
     WNDCLASSW wc = {0}; wc.lpfnWndProc = windowProc; wc.hInstance = instance;
     wc.lpszClassName = L"CE3XConversorWindow"; wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1); wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+    wc.hbrBackground = NULL; wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
     RegisterClassW(&wc);
-    RECT rect = {0, 0, 860, 750};
+    RECT rect = box(0, 0, 760, 438);
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
     AdjustWindowRect(&rect, style, FALSE);
     window = CreateWindowW(wc.lpszClassName, L"Conversor CE3X 3.2 a 2.3", style, CW_USEDEFAULT, CW_USEDEFAULT,
         rect.right - rect.left, rect.bottom - rect.top, NULL, NULL, instance, NULL);
     if (!window) { LocalFree(argv); return 1; }
+    if (argc >= 3 && wcscmp(argv[1], L"--preview") == 0) {
+        SetWindowTextW(sourceEdit, L"C:\\Proyectos\\Vivienda.cex"); updateOutput();
+        ShowWindow(window, SW_SHOWNORMAL); UpdateWindow(window);
+        int saved = savePreview(argv[2]); DestroyWindow(window); LocalFree(argv); return saved ? 0 : 1;
+    }
     if (argc >= 2) { SetWindowTextW(sourceEdit, argv[1]); updateOutput(); }
     LocalFree(argv); ShowWindow(window, show); UpdateWindow(window);
     MSG message;
