@@ -51,6 +51,24 @@ jobs:
           if ($process.ExitCode -ne 0 -or (Get-Content $resultPath -Raw).Trim() -ne 'OK') {
             throw 'Fallo de comunicacion entre el ejecutable y Python.'
           }
+      - name: Revisar ejemplos oficiales de CE3X 3.2
+        shell: pwsh
+        run: |
+          $staging = Join-Path $env:RUNNER_TEMP 'ce3x_oficial'
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          $package = Join-Path $staging 'CE3Xv3.2.zip'
+          Invoke-WebRequest 'https://www.miteco.gob.es/content/dam/miteco/es/energia/eficiencia/certificacionenergetica/documentosreconocidos/procedimientoscertificacion/ce3x/CE3Xv3.2.zip' -OutFile $package
+          if ((Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'd92bea9f25ebd60c30ef9043ffdd3339fc84065eb415b2629b8a77f948f6b9dd') { throw 'Ha cambiado el paquete oficial: revisar las muestras.' }
+          Expand-Archive $package (Join-Path $staging 'installer')
+          $tool = Join-Path $staging 'innounp.zip'
+          Invoke-WebRequest 'https://raw.githubusercontent.com/jrathlev/InnoUnpacker-Windows-GUI/418937d9913c67b9abbe93a2e9e725a06f0f2be7/innounp-2/bin/innounp-2.zip' -OutFile $tool
+          if ((Get-FileHash $tool -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f8e45c9676bebc7d7570108ab572673b541fcf7a7d3d24a04319ac6b5315b4e8') { throw 'SHA256 incorrecto de la herramienta de extraccion.' }
+          Expand-Archive $tool (Join-Path $staging 'tool')
+          $examples = Join-Path $staging 'examples'
+          & "$staging/tool/innounp.exe" -x -m "-d$examples" "$staging/installer/setupCE3Xv3.2.exe" '*.cex'
+          if ($LASTEXITCODE -ne 0) { throw 'Fallo al extraer los ejemplos sin instalar CE3X.' }
+          python -B scripts/probar_ejemplos.py $examples --report _validacion/ejemplos_oficiales.json
+          if ($LASTEXITCODE -ne 0) { throw 'Fallo en la inspeccion de ejemplos oficiales.' }
       - name: Crear paquete portatil
         shell: pwsh
         run: python -B scripts/empaquetar.py
@@ -68,6 +86,8 @@ jobs:
       - name: Conservar paquete y vista previa
         uses: actions/upload-artifact@v4
         with:
-          name: Conversor_CE3X_1_4_0_artefactos
-          path: _release/*
+          name: Conversor_CE3X_1_4_1_artefactos
+          path: |
+            _release/*
+            _validacion/*
           retention-days: 14

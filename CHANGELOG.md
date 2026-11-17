@@ -2,6 +2,14 @@
 
 Las versiones publicadas y sus descargas están en [Releases](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases).
 
+## 1.4.1, 2026-11-17
+
+- Ventana inicial más baja: se elimina la fila de salida y el texto explicativo repetido.
+- La dirección de conversión se integra en el título: Conversor CE3X 3.2 → 2.3.
+- Se conservan la versión, Residencial y el aviso de revisar y recalcular en CE3X 2.3.
+- El estado solo aparece al iniciar una operación o recibir un resultado; no reserva espacio en reposo.
+- Comprobación de los ejemplos del instalador oficial, identificando la versión real de cada archivo.
+
 ## 1.4.0, 2026-11-17
 
 ### Interfaz
