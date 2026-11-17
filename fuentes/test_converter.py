@@ -488,6 +488,9 @@ class ConverterTests(unittest.TestCase):
         self.assertIsNone(c.solar_issues(self.src)[0]['candidate'])
         self.solar_fixture([1000]*12)
         self.assertIsNone(c.solar_issues(self.src)[0]['candidate'])
+    def test_solar_overflow_does_not_offer_adaptation(self):
+        self.solar_fixture([1e308]*12);self.src[2][9]='1e308'
+        self.assertIsNone(c.solar_issues(self.src)[0]['candidate'])
     def test_solar_stale_choice_and_changed_file_rejected(self):
         self.solar_fixture();code,a=self.solar_convert({'unknown':'omit'})
         self.assertEqual(code,1)

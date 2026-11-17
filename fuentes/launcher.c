@@ -167,7 +167,7 @@ static int request(const WCHAR *json, int kind) {
     if (window) SetTimer(window, 1, 100, NULL);
     return 1;
 }
-static int decisionResult, decisionPreviewSaved;
+static int decisionResult, decisionPreviewSaved, decisionSmokeChoice;
 static const WCHAR *decisionPreviewPath;
 static int savePreview(HWND target, const WCHAR *path);
 static LRESULT CALLBACK DecisionProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -184,17 +184,17 @@ static int solarDecision(const WCHAR *message, int canAdapt) {
     RECT parent; GetWindowRect(window, &parent); decisionResult = IDCANCEL;
     HWND dialog = CreateWindowExW(WS_EX_DLGMODALFRAME, wc.lpszClassName,
         L"Datos sin equivalencia directa en CE3X 2.3", WS_POPUP | WS_CAPTION | WS_SYSMENU,
-        parent.left + 20, parent.top + 20, 700, 350, window, NULL, wc.hInstance, NULL);
+        parent.left + 20, parent.top + 20, 700, 290, window, NULL, wc.hInstance, NULL);
     if (!dialog) return IDCANCEL;
     HWND body = CreateWindowExW(0, L"EDIT", message, WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
-        20, 18, 650, 225, dialog, NULL, wc.hInstance, NULL);
+        20, 18, 650, 165, dialog, NULL, wc.hInstance, NULL);
     SendMessageW(body, WM_SETFONT, (WPARAM)font, TRUE);
     HWND adapt = CreateWindowExW(0,L"BUTTON",L"Adaptar a 2.3",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-        20,265,190,36,dialog,(HMENU)501,wc.hInstance,NULL);
+        20,205,190,36,dialog,(HMENU)501,wc.hInstance,NULL);
     HWND omit = CreateWindowExW(0,L"BUTTON",L"Omitir lo indicado",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-        225,265,230,36,dialog,(HMENU)502,wc.hInstance,NULL);
+        225,205,230,36,dialog,(HMENU)502,wc.hInstance,NULL);
     HWND cancel = CreateWindowExW(0,L"BUTTON",L"Cancelar",WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-        470,265,200,36,dialog,(HMENU)IDCANCEL,wc.hInstance,NULL);
+        470,205,200,36,dialog,(HMENU)IDCANCEL,wc.hInstance,NULL);
     SendMessageW(adapt,WM_SETFONT,(WPARAM)font,TRUE); EnableWindow(adapt,canAdapt);
     SendMessageW(omit,WM_SETFONT,(WPARAM)font,TRUE); SendMessageW(cancel,WM_SETFONT,(WPARAM)font,TRUE);
     EnableWindow(window,FALSE); ShowWindow(dialog,SW_SHOW); SetFocus(cancel);
@@ -203,6 +203,7 @@ static int solarDecision(const WCHAR *message, int canAdapt) {
         decisionPreviewSaved=savePreview(dialog,decisionPreviewPath);
         SendMessageW(dialog,WM_COMMAND,IDCANCEL,0);
     }
+    if (decisionSmokeChoice) SendMessageW(dialog,WM_COMMAND,(decisionSmokeChoice==501 && !canAdapt) ? IDCANCEL : decisionSmokeChoice,0);
     MSG msg;
     while (IsWindow(dialog)) {
         int result=GetMessageW(&msg,NULL,0,0);
@@ -232,6 +233,7 @@ static void received(void) {
         setBusy(0); request(json,1); return;
     }
     if (operation == 1) {
+        if (decisionSmokeChoice) selfTestPassed = strcmp(response,decisionSmokeChoice==IDCANCEL ? "CANCELADO" : "REVISAR_CAMBIOS")==0;
         hasAttempt = strcmp(response,"CANCELADO")!=0;
         wcsncpy(lastOutput, path, PATHCAP - 1); lastOutput[PATHCAP - 1] = 0;
         swprintf(text, PATHCAP + 8192, L"%ls", strcmp(response, "REVISAR") == 0 ? L"Conversión completada." : message);
@@ -520,6 +522,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR commandLine, i
     window = CreateWindowW(wc.lpszClassName, L"Conversor CE3X 3.2 \x2192 2.3", style, CW_USEDEFAULT, CW_USEDEFAULT,
         rect.right - rect.left, rect.bottom - rect.top, NULL, NULL, instance, NULL);
     if (!window) { LocalFree(argv); return 1; }
+    if (argc >= 5 && wcscmp(argv[1], L"--smoke-decision") == 0) {
+        decisionSmokeChoice = wcscmp(argv[3],L"adapt")==0 ? 501 : wcscmp(argv[3],L"omit")==0 ? 502 : IDCANCEL;
+        SetWindowTextW(sourceEdit,argv[2]); ShowWindow(window,SW_SHOWNORMAL); UpdateWindow(window); convert();
+        ULONGLONG started=GetTickCount64(); MSG testMessage;
+        while (busy && GetTickCount64()-started<30000) {
+            while (PeekMessageW(&testMessage,NULL,0,0,PM_REMOVE)) { TranslateMessage(&testMessage); DispatchMessageW(&testMessage); }
+            pollEngine(); Sleep(10);
+        }
+        FILE *file=_wfopen(argv[4],L"wb");
+        if (file) { fputs(selfTestPassed ? "OK\n" : "ERROR\n",file); fclose(file); }
+        DestroyWindow(window); LocalFree(argv); return selfTestPassed ? 0 : 1;
+    }
     if (argc >= 3 && wcscmp(argv[1], L"--preview-decision") == 0) {
         decisionPreviewPath=argv[2]; ShowWindow(window,SW_SHOWNORMAL); UpdateWindow(window);
         solarDecision(L"Edificio: SOLAR_MENSUAL. Produccion 1413.258 kWh/ano. Se propone cobertura ACS 70 %. Se pierden reparto mensual y potencia solar. Adaptacion ensayada solo con ACS electrico sin acumulacion, zona D2. Omitir elimina esta instalacion solar de la salida. Revisar y recalcular en CE3X 2.3. El original se conserva.", argc < 4 || wcscmp(argv[3],L"omit") != 0);

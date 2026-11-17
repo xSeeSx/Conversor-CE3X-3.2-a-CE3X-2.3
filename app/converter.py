@@ -627,6 +627,7 @@ def solar_candidate(generators, systems, general, envelope_changes=False):
         demand=360*4.18*flow*(60-11.7)/3600
         production=sum(as_num(s[m],'solar.'+m,minimum=0) for m in SOLAR_MONTHS)
         as_num(s['potencia'],'solar.potencia',minimum=0)
+        require(math.isfinite(demand) and math.isfinite(production),'E_SOLAR_SCOPE','Balance anual no finito')
         require(0<production<=demand,'E_SOLAR_SCOPE','Produccion nula o superior a la demanda anual; caso no validado')
         return {'percent':production/demand*100,'production':production,'demand':demand},''
     except (ConversionError,KeyError,TypeError,IndexError) as exc:
