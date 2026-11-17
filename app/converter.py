@@ -17,14 +17,13 @@ import pickle
 import pickletools
 import platform
 import re
-import shutil
 import sys
 import traceback
-import uuid
+import tempfile
 import zipfile
 from dataclasses import dataclass, field
 
-VERSION = '1.3.0'
+VERSION = '1.4.0'
 ROOT = Path(__file__).resolve().parent
 MAX_BYTES = 64 * 1024 * 1024
 BLOCK_NAMES = ['version', 'administrativos', 'generales', 'envolvente', 'instalaciones',
@@ -288,34 +287,31 @@ def as_num(value, path, minimum=None):
 
 
 class Audit:
-    def __init__(self, run):
-        self.run = run
+    def __init__(self, run=None):
         self.stage = 'inicio'
         self.events, self.changes, self.omitted = [], [], []
-        self.log = run / 'conversion.log'
-        self.log.write_text(f'CE3X Conversor {VERSION}\n', encoding='utf-8')
 
     def event(self, level, code, message, **data):
-        record = {'time': dt.datetime.now().astimezone().isoformat(), 'level':level,
-                  'code':code, 'stage':self.stage, 'message':message, **data}
-        self.events.append(record)
-        with self.log.open('a', encoding='utf-8') as f:
-            f.write(f"{record['time']} [{level}] {code} | {self.stage} | {message}\n")
-            if data: f.write(json.dumps(data, ensure_ascii=False) + '\n')
+        self.events.append({'time': dt.datetime.now().astimezone().isoformat(), 'level': level,
+                            'code': code, 'stage': self.stage, 'message': message, **data})
 
     def change(self, code, path, before, after, reason):
-        record = {'code':code, 'path':path, 'before':json_value(before),
-                  'after':json_value(after), 'reason':reason}
-        self.changes.append(record)
+        self.changes.append({'code': code, 'path': path, 'before': json_value(before),
+                             'after': json_value(after), 'reason': reason})
         self.event('INFO', code, reason, path=path)
 
     def omit(self, path, value, reason):
-        self.omitted.append({'path':path, 'value':json_value(value), 'reason':reason})
+        self.omitted.append({'path': path, 'value': json_value(value), 'reason': reason})
 
-    def flush(self):
-        write_json(self.run/'eventos.json', self.events)
-        write_json(self.run/'cambios.json', self.changes)
-        write_json(self.run/'datos_no_transferidos.json', self.omitted)
+    def log_text(self):
+        lines = [f'CE3X Conversor {VERSION}']
+        for record in self.events:
+            lines.append(f"{record['time']} [{record['level']}] {record['code']} | {record['stage']} | {record['message']}")
+            extra = {key: value for key, value in record.items()
+                     if key not in ('time', 'level', 'code', 'stage', 'message')}
+            if extra:
+                lines.append(json.dumps(extra, ensure_ascii=False))
+        return '\n'.join(lines) + '\n'
 
 
 def repair_text(value, audit, path, memo=None):
@@ -703,151 +699,206 @@ def compare_windows(src,dst,profile):
                 'E_PRESERVATION','Propiedades o tipo de hueco alterados',f'huecos[{i}]')
 
 
-def make_zip(run):
-    run=Path(run).resolve()
-    dest=run.parent/(run.name+'_diagnostico.zip')
-    temporary=dest.with_suffix('.zip.partial')
-    with zipfile.ZipFile(temporary,'w',zipfile.ZIP_DEFLATED) as z:
-        for p in sorted(run.rglob('*')):
-            if p.is_file() and not p.name.endswith('.partial'):
-                z.write(p,arcname=run.name+'/'+str(p.relative_to(run)))
-    os.replace(temporary,dest)
-    return dest
+@dataclass
+class ConversionAttempt:
+    source: Path
+    output: Path
+    audit: Audit
+    manifest: dict
+    artifacts: dict = field(default_factory=dict)
+    summary: str = ''
+    traceback_text: str = ''
 
-
-def bridge_write(path,status,run,message):
-    if path:
-        Path(path).write_text(status+'\n'+str(run)+'\n'+message.replace('\n',' ')+'\n',encoding='utf-8')
-
-
-def convert(source,template,outdir,profile_path=None,fix_accents=True,bridge=None):
-    source,template=Path(source).resolve(),Path(template).resolve()
-    root=Path(outdir).resolve()
-    root.mkdir(parents=True,exist_ok=True)
-    run=root/('intento_'+dt.datetime.now().strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6])
-    run.mkdir()
-    audit=Audit(run)
-    status,exit_code='ERROR',1
-    manifest={'app_version':VERSION,'python':platform.python_version(),'platform':platform.platform(),
-              'run':run.name,'started':dt.datetime.now().astimezone().isoformat(),
-              'source':str(source),'template':str(template),'application_verified':False,
-              'fix_literal_accents':True}
-    summary=''
-    try:
-        audit.stage='comprobar entradas'
-        require(source.is_file(),'E_SOURCE','No existe el archivo de origen',str(source))
-        require(template.is_file(),'E_TEMPLATE','No existe la plantilla 2.3',str(template))
-        profile_path=Path(profile_path) if profile_path else ROOT/'profile.json'
-        profile=json.loads(profile_path.read_text(encoding='utf-8'))
-        manifest.update(source_sha256=sha(source),template_sha256=sha(template),profile_sha256=sha(profile_path),profile_version=profile['profile_version'])
-        shutil.copyfile(profile_path,run/'perfil_utilizado.json')
-        shutil.copyfile(ROOT/'mm_schema_23.json',run/'esquema_mejoras_23.json')
-        manifest['improvements_schema_sha256']=sha(ROOT/'mm_schema_23.json')
-        # Permite reconstruir exactamente el motor empleado al depurar.
-        shutil.copyfile(__file__,run/'motor_utilizado.py')
-        audit.event('INFO','START','Inicio de conversion; archivos de entrada solo lectura',
-                    version=VERSION,python=platform.python_version(),platform=platform.platform(),
-                    string_encoding='latin1',scanner='protocol0_ops')
-        src=read_cex(source,audit,'origen')
-        require(str(src[0])==profile['source_header'],'E_SOURCE_VERSION',f'Version no compatible: {src[0]}')
-        native=read_cex(template,audit,'plantilla')
-        require(str(native[0])==profile['target_header'],'E_TEMPLATE_VERSION',f'La plantilla no es CE3X 2.3 Residencial: {native[0]}')
-        require(len(native[1])==26 and len(native[2])==21 and len(native[4])==12,
-                'E_TEMPLATE_SCHEMA','La plantilla 2.3 tiene una estructura inesperada')
-        write_json(run/'modelo_origen_tecnico.json',technical_snapshot(src))
-        # La reparacion es siempre automatica, tambien en medidas y grafos ciclicos.
-        src=repair_text(src,audit,'blocks')
-        validate(src,audit,profile)
-        dst=transfer(src,native,profile,audit,fix_accents)
-        validate(dst,audit,profile,target=True)
-        check_preservation(src,dst,fix_accents)
-        compare_windows(src,dst,profile)
-        validate_target_classes(dst)
-        write_json(run/'modelo_destino_tecnico.json',technical_snapshot(dst))
-        audit.stage='escribir y releer'
-        destination=run/'convertido_CE3X_2_3.cex'
-        require(destination.resolve() not in (source,template),'E_OVERWRITE','La salida coincide con una entrada')
-        temporary=destination.with_suffix('.cex.partial')
-        temporary.write_bytes(encoded(dst))
-        reread=read_cex(temporary,audit,'relectura')
-        require(typed_value(dst)==typed_value(reread),'E_ROUNDTRIP','La relectura ha cambiado valores, clases o tipos STRING/UNICODE')
-        # Se publica solo despues de una relectura completa satisfactoria.
-        os.replace(temporary,destination)
-        manifest.update(output=destination.name,output_sha256=sha(destination),structural_validation=True,
-                        envelope_count=len(dst[3][0]),window_count=len(dst[3][1]),bridge_count=len(dst[3][2]),
-                        improvement_count=len(dst[5]),improvement_names=[m.state['nombre'] for m in dst[5]],
-                        cached_results_origin_version='3.2',target_results_recalculated=False)
-        audit.event('INFO','ROUNDTRIP_OK','15 bloques releidos; clases, acentos, valores y tipos conservados')
-        status,exit_code='REVISAR',0
-        summary=f'Archivo generado. {len(dst[3][0])} cerramientos, {len(dst[3][1])} huecos, {len(dst[3][2])} puentes y {len(dst[5])} conjuntos de mejora. Falta probar y recalcular en CE3X 2.3.'
-    except Exception as exc:
-        if isinstance(exc,ConversionError):
-            code,path=exc.code,exc.path
-        else:
-            code,path='E_UNEXPECTED',''
-        audit.event('ERROR',code,str(exc),path=path,exception_type=type(exc).__name__)
-        trace=traceback.format_exc()
-        (run/'traceback.txt').write_text(trace,encoding='utf-8')
-        manifest.update(structural_validation=False,error_code=code,error_path=path,error_message=str(exc),error_stage=audit.stage)
-        summary=code+': '+str(exc)
-        for p in run.glob('*.partial'): p.unlink(missing_ok=True)
-    finally:
-        # Verifica que la operacion no ha escrito en ninguno de los originales.
-        for name,p in (('source',source),('template',template)):
-            expected=manifest.get(name+'_sha256')
-            if expected and p.is_file() and sha(p)!=expected:
-                audit.event('ERROR','E_INPUT_CHANGED',f'La entrada {name} cambio durante la conversion')
-                manifest['input_changed']=name
-                status,exit_code='ERROR',1
-                summary='E_INPUT_CHANGED: una entrada ha cambiado durante el proceso; repetir con CE3X cerrado.'
-                output=manifest.get('output')
-                if output: (run/output).unlink(missing_ok=True)
-                manifest['structural_validation']=False
-        manifest['status']=status
-        manifest['finished']=dt.datetime.now().astimezone().isoformat()
-        audit.flush()
-        write_json(run/'resultado.json',manifest)
-        warnings=[f"{e['code']}: {e['message']}" for e in audit.events if e['level']=='WARNING']
-        (run/'LEEME_RESULTADO.txt').write_text(
-            'CONVERSOR CE3X '+VERSION+'\n\n'+summary+'\n\n'
-            'Estado: '+status+'\nValidacion en CE3X: PENDIENTE\n\n'
-            '1. Abrir convertido_CE3X_2_3.cex en CE3X 2.3.\n'
-            '2. Revisar cerramientos, cada hueco y cada equipo, sobre todo los rendimientos estimados.\n'
-            '3. Recalcular la calificacion y guardar con otro nombre.\n'
-            '4. Recalcular los conjuntos de mejora y su analisis economico, y regenerar los complementos.\n'
-            '5. Si falla: anotar accion y elemento, adjuntar el log de CE3X desde el programa.\n\n'
-            'No se han recalculado consumos, calificaciones ni cumplimiento CTE.\n'
-            'Los datos fisicos proceden del origen 3.2, no de la plantilla.\n'
-            'El ZIP de diagnostico contiene datos tecnicos del proyecto y los archivos que adjuntes.\n\n'
-            +'\n'.join(warnings)+'\n',encoding='utf-8')
+    def export_diagnostic(self, destination, notes='', attachment=None, overwrite=False):
+        """Write diagnostic data only after an explicit user request."""
+        destination = Path(destination).resolve()
+        require(destination.suffix.lower() == '.zip', 'E_DIAGNOSTIC_PATH', 'El diagnostico debe guardarse como ZIP')
+        protected = {self.source, self.output, Path(self.manifest['template'])}
+        require(destination not in protected, 'E_OVERWRITE', 'El diagnostico coincide con un archivo del proyecto')
+        files = dict(self.artifacts)
+        files.update({
+            'conversion.log': self.audit.log_text(),
+            'eventos.json': json_text(self.audit.events),
+            'cambios.json': json_text(self.audit.changes),
+            'datos_no_transferidos.json': json_text(self.audit.omitted),
+            'resultado.json': json_text(self.manifest),
+        })
+        if self.traceback_text:
+            files['traceback.txt'] = self.traceback_text
+        observation = {'date': dt.datetime.now().astimezone().isoformat(), 'notes': notes}
+        if attachment:
+            attached = Path(attachment).resolve()
+            require(attached.is_file(), 'E_EXTERNAL_LOG', 'El archivo adjunto no existe')
+            require(attached.stat().st_size <= MAX_BYTES, 'E_EXTERNAL_LOG', 'El archivo adjunto supera 64 MiB')
+            contents = attached.read_bytes()
+            name = 'adjunto' + attached.suffix[:12]
+            files['errores_CE3X/' + name] = contents
+            observation.update(original_name=attached.name, attached_name=name,
+                               sha256=hashlib.sha256(contents).hexdigest())
+        if notes or attachment:
+            files['errores_CE3X/observacion.json'] = json_text(observation)
+        files['LEEME_RESULTADO.txt'] = (
+            'CONVERSOR CE3X ' + VERSION + '\n\n' + self.summary + '\n\n'
+            'Estado: ' + self.manifest['status'] + '\n'
+            'Salida: ' + str(self.output) + '\n\n'
+            'Revisar y recalcular el edificio, las mejoras y el analisis economico en CE3X 2.3.\n'
+            'Los resultados guardados proceden del origen 3.2 y no se han recalculado en destino.\n'
+            'Este ZIP puede contener datos tecnicos del proyecto y los adjuntos seleccionados.\n'
+        )
+        # No folder, log or ZIP is created before this explicit export operation.
+        temporary = None
         try:
-            make_zip(run)
+            with tempfile.NamedTemporaryFile(prefix='.ce3x_diagnostico_', suffix='.partial',
+                                             dir=destination.parent, delete=False) as stream:
+                temporary = Path(stream.name)
+            with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED) as archive:
+                for name, contents in sorted(files.items()):
+                    archive.writestr(name, contents)
+            publish_file(temporary, destination, overwrite)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        return destination
+
+
+def json_text(value):
+    return json.dumps(value, ensure_ascii=False, indent=2) + '\n'
+
+
+def output_path(source):
+    source = Path(source).resolve()
+    return source.with_name(source.stem + '_CE3X2.3.cex')
+
+
+def publish_file(temporary, destination, overwrite=False):
+    if overwrite:
+        os.replace(temporary, destination)
+    elif os.name == 'nt':
+        # Windows rename refuses to replace an existing destination, including on FAT.
+        os.rename(temporary, destination)
+    else:
+        # Atomic no-replace publication on POSIX, including concurrent conversions.
+        os.link(temporary, destination)
+        temporary.unlink()
+
+
+def convert(source, template, profile_path=None, fix_accents=True, overwrite=False):
+    source, template = Path(source).resolve(), Path(template).resolve()
+    destination = output_path(source)
+    audit = Audit()
+    manifest = {'app_version': VERSION, 'python': platform.python_version(),
+                'platform': platform.platform(), 'started': dt.datetime.now().astimezone().isoformat(),
+                'source': str(source), 'template': str(template), 'output': str(destination),
+                'application_verified': False, 'fix_literal_accents': True}
+    attempt = ConversionAttempt(source, destination, audit, manifest)
+    status, exit_code = 'ERROR', 1
+    temporary = None
+    try:
+        audit.stage = 'comprobar entradas'
+        require(source.is_file(), 'E_SOURCE', 'No existe el archivo de origen', str(source))
+        require(template.is_file(), 'E_TEMPLATE', 'No existe la plantilla 2.3', str(template))
+        require(destination not in (source, template), 'E_OVERWRITE', 'La salida coincide con una entrada')
+        require(overwrite or not destination.exists(), 'E_OUTPUT_EXISTS',
+                'Ya existe el archivo de salida. Confirma su sustitucion para continuar.', str(destination))
+        profile_path = Path(profile_path) if profile_path else ROOT / 'profile.json'
+        profile_bytes = profile_path.read_bytes()
+        profile = json.loads(profile_bytes)
+        schema_bytes = (ROOT / 'mm_schema_23.json').read_bytes()
+        manifest.update(source_sha256=sha(source), template_sha256=sha(template),
+                        profile_sha256=hashlib.sha256(profile_bytes).hexdigest(),
+                        profile_version=profile['profile_version'],
+                        improvements_schema_sha256=hashlib.sha256(schema_bytes).hexdigest())
+        attempt.artifacts.update({'perfil_utilizado.json': profile_bytes,
+                                  'esquema_mejoras_23.json': schema_bytes,
+                                  'motor_utilizado.py': Path(__file__).read_bytes()})
+        audit.event('INFO', 'START', 'Inicio de conversion; archivos de entrada solo lectura',
+                    version=VERSION, python=platform.python_version(), platform=platform.platform(),
+                    string_encoding='latin1', scanner='protocol0_ops')
+        src = read_cex(source, audit, 'origen')
+        require(str(src[0]) == profile['source_header'], 'E_SOURCE_VERSION', f'Version no compatible: {src[0]}')
+        native = read_cex(template, audit, 'plantilla')
+        require(str(native[0]) == profile['target_header'], 'E_TEMPLATE_VERSION', f'La plantilla no es CE3X 2.3 Residencial: {native[0]}')
+        require(len(native[1]) == 26 and len(native[2]) == 21 and len(native[4]) == 12,
+                'E_TEMPLATE_SCHEMA', 'La plantilla 2.3 tiene una estructura inesperada')
+        attempt.artifacts['modelo_origen_tecnico.json'] = json_text(technical_snapshot(src))
+        src = repair_text(src, audit, 'blocks')
+        validate(src, audit, profile)
+        dst = transfer(src, native, profile, audit, fix_accents)
+        validate(dst, audit, profile, target=True)
+        check_preservation(src, dst, fix_accents)
+        compare_windows(src, dst, profile)
+        validate_target_classes(dst)
+        attempt.artifacts['modelo_destino_tecnico.json'] = json_text(technical_snapshot(dst))
+        audit.stage = 'escribir y releer'
+        with tempfile.NamedTemporaryFile(prefix='.ce3x_conversion_', suffix='.partial',
+                                         dir=source.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(encoded(dst))
+        reread = read_cex(temporary, audit, 'relectura')
+        require(typed_value(dst) == typed_value(reread), 'E_ROUNDTRIP',
+                'La relectura ha cambiado valores, clases o tipos STRING/UNICODE')
+        # Check both originals before making the validated result visible.
+        for name, path in (('source', source), ('template', template)):
+            require(path.is_file() and sha(path) == manifest[name + '_sha256'], 'E_INPUT_CHANGED',
+                    'Una entrada ha cambiado durante el proceso; repetir con CE3X cerrado.', str(path))
+        try:
+            publish_file(temporary, destination, overwrite)
+        except FileExistsError as exc:
+            raise ConversionError('E_OUTPUT_EXISTS', 'Ya existe el archivo de salida.', str(destination)) from exc
+        manifest.update(output_sha256=sha(destination), structural_validation=True,
+                        envelope_count=len(dst[3][0]), window_count=len(dst[3][1]), bridge_count=len(dst[3][2]),
+                        improvement_count=len(dst[5]), improvement_names=[m.state['nombre'] for m in dst[5]],
+                        cached_results_origin_version='3.2', target_results_recalculated=False)
+        audit.event('INFO', 'ROUNDTRIP_OK', '15 bloques releidos; clases, acentos, valores y tipos conservados')
+        status, exit_code = 'REVISAR', 0
+        attempt.summary = (f'Archivo generado. {len(dst[3][0])} cerramientos, {len(dst[3][1])} huecos, '
+                           f'{len(dst[3][2])} puentes y {len(dst[5])} conjuntos de mejora. '
+                           'Revisar y recalcular en CE3X 2.3.')
+    except Exception as exc:
+        code, path = (exc.code, exc.path) if isinstance(exc, ConversionError) else ('E_UNEXPECTED', '')
+        audit.event('ERROR', code, str(exc), path=path, exception_type=type(exc).__name__)
+        attempt.traceback_text = traceback.format_exc()
+        manifest.update(structural_validation=False, error_code=code, error_path=path,
+                        error_message=str(exc), error_stage=audit.stage)
+        attempt.summary = code + ': ' + str(exc)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        manifest.update(status=status, finished=dt.datetime.now().astimezone().isoformat())
+    return exit_code, attempt
+
+
+def serve(stream_in=None, stream_out=None):
+    """Keep the last attempt in memory until the GUI requests an export or closes."""
+    stream_in, stream_out = stream_in or sys.stdin, stream_out or sys.stdout
+    last_attempt = None
+    def reply(status, path, message):
+        clean = lambda text: str(text).replace('\t', ' ').replace('\r', ' ').replace('\n', ' ')
+        stream_out.write('\t'.join(map(clean, (status, path, message))) + '\n')
+        stream_out.flush()
+    for line in stream_in:
+        try:
+            request = json.loads(line)
+            command = request['command']
+            if command == 'exit':
+                return
+            if command == 'convert':
+                code, last_attempt = convert(request['source'], request.get('template', ROOT / 'plantilla_23.cex'),
+                                             overwrite=request.get('overwrite', False))
+                reply(last_attempt.manifest['status'], last_attempt.output if not code else '', last_attempt.summary)
+            elif command == 'diagnostic':
+                require(last_attempt is not None, 'E_RUN', 'Primero realiza una conversion')
+                path = last_attempt.export_diagnostic(request['destination'], request.get('notes', ''),
+                                                      request.get('attachment'), request.get('overwrite', False))
+                reply('GUARDADO', path, 'Diagnostico guardado. Revisa su contenido antes de compartirlo.')
+            elif command == 'self-test':
+                self_test()
+                reply('OK', '', 'Motor y codificacion correctos')
+            else:
+                raise ConversionError('E_COMMAND', 'Operacion no reconocida')
         except Exception as exc:
-            audit.event('ERROR','E_ZIP',f'No se pudo empaquetar el diagnostico: {exc}')
-            audit.flush()
-        bridge_write(bridge,status,run,summary)
-    return exit_code,run
+            reply('ERROR', '', str(exc))
 
-
-def evidence(run,log=None,notes='',bridge=None):
-    run=Path(run).resolve()
-    require((run/'resultado.json').is_file(),'E_RUN','Selecciona un intento valido')
-    folder=run/'errores_CE3X'
-    folder.mkdir(exist_ok=True)
-    key=dt.datetime.now().strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6]
-    record={'date':dt.datetime.now().astimezone().isoformat(),'notes':notes}
-    if log:
-        source=Path(log)
-        require(source.is_file(),'E_EXTERNAL_LOG','El archivo adjunto no existe')
-        require(source.stat().st_size<=MAX_BYTES,'E_EXTERNAL_LOG','El archivo adjunto supera 64 MiB')
-        extension=source.suffix[:12]
-        target=folder/(key+'_adjunto'+extension)
-        shutil.copyfile(source,target)
-        record.update(original_name=source.name,attached_name=target.name,sha256=sha(target))
-    write_json(folder/(key+'_observacion.json'),record)
-    dest=make_zip(run)
-    bridge_write(bridge,'ADJUNTADO',run,'Error guardado. Diagnostico actualizado: '+dest.name)
-    return dest
 
 
 def self_test():
@@ -869,26 +920,36 @@ def self_test():
 
 
 def main(argv=None):
-    parser=argparse.ArgumentParser(description='Conversor experimental CE3X 3.2 a 2.3 residencial')
-    sub=parser.add_subparsers(dest='command',required=True)
-    p=sub.add_parser('convert')
-    p.add_argument('--source',required=True);p.add_argument('--template',required=True);p.add_argument('--outdir',required=True)
-    p.add_argument('--profile');p.add_argument('--fix-accents',action='store_true',default=True,help=argparse.SUPPRESS);p.add_argument('--bridge')
-    p=sub.add_parser('evidence');p.add_argument('--run',required=True);p.add_argument('--log');p.add_argument('--notes-file');p.add_argument('--bridge')
-    p=sub.add_parser('self-test');p.add_argument('--bridge')
-    a=parser.parse_args(argv)
+    parser = argparse.ArgumentParser(description='Conversor experimental CE3X 3.2 a 2.3 residencial')
+    sub = parser.add_subparsers(dest='command', required=True)
+    p = sub.add_parser('convert')
+    p.add_argument('--source', required=True)
+    p.add_argument('--template', default=str(ROOT / 'plantilla_23.cex'))
+    p.add_argument('--profile')
+    p.add_argument('--overwrite', action='store_true', help='Sustituir expresamente una salida existente')
+    p.add_argument('--diagnostic', help='Guardar un ZIP de diagnostico expresamente en esta ruta')
+    p.add_argument('--fix-accents', action='store_true', default=True, help=argparse.SUPPRESS)
+    sub.add_parser('self-test')
+    sub.add_parser('serve')
+    a = parser.parse_args(argv)
     try:
-        if a.command=='self-test':
-            self_test();bridge_write(a.bridge,'OK',ROOT,'Motor y codificacion correctos');return 0
-        if a.command=='convert':
-            code,run=convert(a.source,a.template,a.outdir,a.profile,a.fix_accents,a.bridge)
-            print(str(run));return code
-        if a.command=='evidence':
-            notes=Path(a.notes_file).read_text(encoding='utf-8-sig') if a.notes_file else ''
-            print(evidence(a.run,a.log,notes,a.bridge));return 0
+        if a.command == 'self-test':
+            self_test()
+            return 0
+        if a.command == 'serve':
+            serve()
+            return 0
+        code, attempt = convert(a.source, a.template, a.profile, a.fix_accents, a.overwrite)
+        print(attempt.summary)
+        if not code:
+            print(attempt.output)
+        if a.diagnostic:
+            print(attempt.export_diagnostic(a.diagnostic))
+        return code
     except Exception as exc:
-        if getattr(a,'bridge',None): bridge_write(a.bridge,'ERROR','','Error: '+str(exc))
-        traceback.print_exc();return 1
+        print('Error: ' + str(exc), file=sys.stderr)
+        return 1
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     sys.exit(main())

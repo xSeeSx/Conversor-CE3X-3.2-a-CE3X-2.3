@@ -14,7 +14,7 @@ import converter as c
 
 class ConverterTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
+        self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name).resolve()
         self.template=c.read_cex(c.ROOT/'plantilla_23.cex')
         self.profile=json.loads((c.ROOT/'profile.json').read_text(encoding='utf-8'))
         self.src=copy.deepcopy(self.template)
@@ -45,7 +45,7 @@ class ConverterTests(unittest.TestCase):
         self.src[6][2]=[['Instalación','Placas fotovoltaicas','Instalaciones','30','8000','150']]
         self.src[11][:2]=[m.state['nombre'] for m in self.src[5]]
         code,run=self.run_convert();self.assertEqual(code,0)
-        dst=c.read_cex(run/'convertido_CE3X_2_3.cex')
+        dst=c.read_cex(run.output)
         self.assertEqual(len(dst[5]),2)
         self.assertEqual(dst[11][:2],self.src[11][:2]);self.assertEqual(dst[6],self.src[6])
         for a,b in zip(self.src[5],dst[5]):
@@ -53,7 +53,7 @@ class ConverterTests(unittest.TestCase):
                 self.assertEqual(a.state[key],b.state[key])
             self.assertEqual(len(b.state['datosInstalaciones']),12)
             self.assertEqual(b.state['analisisEconomico'].state['inversionInicial'],[8000.0])
-        manifest=json.loads((run/'resultado.json').read_text())
+        manifest=run.manifest
         self.assertEqual(manifest['improvement_count'],2)
         self.assertFalse(manifest['target_results_recalculated'])
     def test_improvement_new_generator_rejected(self):
@@ -63,7 +63,7 @@ class ConverterTests(unittest.TestCase):
         name='Aislamiento a\\xf1adido y partici\\u00f3n'
         self.src[5]=[self.fixture_measure(name)];self.src[11][0]=name
         code,run=self.run_convert();self.assertEqual(code,0)
-        dst=c.read_cex(run/'convertido_CE3X_2_3.cex')
+        dst=c.read_cex(run.output)
         self.assertEqual(dst[5][0].state['nombre'],'Aislamiento añadido y partición')
         self.assertEqual(dst[11][0],dst[5][0].state['nombre'])
     def test_improvement_unknown_class_rejected(self):
@@ -80,7 +80,7 @@ class ConverterTests(unittest.TestCase):
     def test_pv_contribution_native_type_and_energy_preserved(self):
         self.src[4][6]=[['Fotovoltaica','renovable',['','','',False],['632.3','','','','',''],[False,True],'Edificio Objeto']]
         code,run=self.run_convert();self.assertEqual(code,0)
-        pv=c.read_cex(run/'convertido_CE3X_2_3.cex')[4][6][0]
+        pv=c.read_cex(run.output)[4][6][0]
         self.assertEqual(pv[1],'Contribuciones energéticas');self.assertEqual(pv[3][0],'632.3')
     def test_repair_text_cycles_sharing_and_capital_accents(self):
         ob=c.CexObject(c.GlobalRef('datosEdificio','datosEdificio'))
@@ -96,12 +96,12 @@ class ConverterTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code,'E_TEXT_COLLISION')
     def run_convert(self,fix=False,source=None):
         self.source_path.write_bytes(c.encoded(source or self.src));self.template_path.write_bytes(c.encoded(self.template))
-        return c.convert(self.source_path,self.template_path,self.root/'salidas',fix_accents=fix)
+        return c.convert(self.source_path,self.template_path,fix_accents=fix)
     def assertFailure(self,code,source=None):
         status,run=self.run_convert(source=source)
-        self.assertEqual(status,1);r=json.loads((run/'resultado.json').read_text(encoding='utf-8'))
-        self.assertEqual(r['error_code'],code);self.assertFalse((run/'convertido_CE3X_2_3.cex').exists())
-        self.assertTrue((run/'traceback.txt').exists());self.assertTrue(run.with_name(run.name+'_diagnostico.zip').exists())
+        self.assertEqual(status,1);r=run.manifest
+        self.assertEqual(r['error_code'],code);self.assertFalse((run.output).exists())
+        self.assertTrue(run.traceback_text);self.assertFalse(list(self.root.glob('*.zip')))
     def test_roundtrip_accent_string_unicode(self):c.self_test()
     def test_scanner_latin1_raw_and_escaped(self):
         for literal in (b"S'Partici\xf3n y ni\xf1o'\n.", b"S'Partici\\xf3n y ni\\xf1o'\n."):
@@ -118,8 +118,8 @@ class ConverterTests(unittest.TestCase):
                 list(c.pickletools.genops(b"S'ni\\xf1o'\n."))
             self.src[6][0]=[c.LegacyString('Año: partición, patrón y aislamiento')]
             code,run=self.run_convert()
-            self.assertEqual(code,0,(run/'resultado.json').read_text())
-            dst=c.read_cex(run/'convertido_CE3X_2_3.cex')
+            self.assertEqual(code,0,str(run.manifest))
+            dst=c.read_cex(run.output)
             self.assertEqual(dst[5],[])
             self.assertEqual(dst[3][0][0][0],'Partición superior')
     def test_scanner_rejects_binary_before_reading_payload(self):
@@ -142,7 +142,7 @@ class ConverterTests(unittest.TestCase):
         self.assertIn(b'(iEnvolvente.objetosEnvolvente\nHuecoConocidas'.replace(b'\n',b'\r\n'),raw)
     def test_succeeds_preserves_thermal_values(self):
         status,run=self.run_convert();self.assertEqual(status,0)
-        dst=c.read_cex(run/'convertido_CE3X_2_3.cex')
+        dst=c.read_cex(run.output)
         self.assertEqual(dst[3][0],self.src[3][0]);self.assertEqual(dst[4][5][0][2],[374.8,275.8,485.4])
         self.assertEqual(dst[4][5][0][6],'Estimado según Instalación')
         self.assertEqual(len(dst[4][5][0]),10);self.assertEqual(len(dst[4][5][0][8]),6)
@@ -152,12 +152,12 @@ class ConverterTests(unittest.TestCase):
     def test_template_does_not_replace_systems(self):
         self.template[4][5]=[['equipo de otra vivienda','mixto3',[1,2,3]]]
         status,run=self.run_convert();self.assertEqual(status,0)
-        dst=c.read_cex(run/'convertido_CE3X_2_3.cex');self.assertEqual(dst[4][5][0][0],'Aerotermia')
+        dst=c.read_cex(run.output);self.assertEqual(dst[4][5][0][0],'Aerotermia')
     def test_input_hashes_unchanged(self):
-        status,run=self.run_convert();r=json.loads((run/'resultado.json').read_text())
+        status,run=self.run_convert();r=run.manifest
         self.assertEqual(r['source_sha256'],c.sha(self.source_path));self.assertEqual(r['template_sha256'],c.sha(self.template_path))
     def test_two_runs_never_overwrite(self):
-        _,a=self.run_convert();_,b=self.run_convert();self.assertNotEqual(a,b);self.assertTrue(a.exists())
+        _,a=self.run_convert();before=a.output.read_bytes();code,b=self.run_convert();self.assertEqual(code,1);self.assertEqual(b.manifest['error_code'],'E_OUTPUT_EXISTS');self.assertEqual(a.output.read_bytes(),before)
     def test_wrong_version(self):
         src=copy.deepcopy(self.src);src[0]='CEXv2.3 Residencial';self.assertFailure('E_SOURCE_VERSION',src)
     def test_active_new_system_group(self):
@@ -180,40 +180,43 @@ class ConverterTests(unittest.TestCase):
         src=copy.deepcopy(self.src);src[2][6]='nan';self.assertFailure('E_NUMBER',src)
     def test_reset_addons_preserves_economics(self):
         src=copy.deepcopy(self.src);src[6][0]=[['factura original',123]];src[12]={'Isover':'resultado viejo'}
-        _,run=self.run_convert(source=src);dst=c.read_cex(run/'convertido_CE3X_2_3.cex')
+        _,run=self.run_convert(source=src);dst=c.read_cex(run.output)
         self.assertEqual(dst[6],src[6]);self.assertEqual(dst[12],{})
     def test_truncated_file_diagnostic(self):
         self.source_path.write_bytes(c.encoded(self.src)[:300]);self.template_path.write_bytes(c.encoded(self.template))
-        code,run=c.convert(self.source_path,self.template_path,self.root/'salidas');self.assertEqual(code,1)
-        self.assertTrue((run/'conversion.log').exists());self.assertFalse(list(run.glob('*.cex')))
+        code,run=c.convert(self.source_path,self.template_path);self.assertEqual(code,1)
+        self.assertTrue(run.audit.events);self.assertFalse(run.output.exists());self.assertFalse(list(self.root.glob('*.log')))
     def test_refuse_nontext_format(self):
         self.source_path.write_bytes(b'\x80\x04N.');self.template_path.write_bytes(c.encoded(self.template))
-        code,run=c.convert(self.source_path,self.template_path,self.root/'salidas');self.assertEqual(code,1)
+        code,run=c.convert(self.source_path,self.template_path);self.assertEqual(code,1)
     def test_literal_accents_opt_in(self):
         src=copy.deepcopy(self.src)
         src[3][0][0][0]='Partici\\xf3n superior';src[3][0][0][1]='Partici\\xf3n Interior'
         src[3][1][0].state['cerramientoAsociado']='Partici\\xf3n superior'
         self.src=src;code,run=self.run_convert(fix=True);self.assertEqual(code,0)
-        dst=c.read_cex(run/'convertido_CE3X_2_3.cex');self.assertEqual(dst[3][0][0][0],'Partición superior')
-        changes=json.loads((run/'cambios.json').read_text(encoding='utf-8'));self.assertTrue(any(x['code']=='FIX_ACCENT_ESCAPE' for x in changes))
+        dst=c.read_cex(run.output);self.assertEqual(dst[3][0][0][0],'Partición superior')
+        changes=run.audit.changes;self.assertTrue(any(x['code']=='FIX_ACCENT_ESCAPE' for x in changes))
     def test_automatic_literal_rewrite_even_with_false_legacy_flag(self):
         src=copy.deepcopy(self.src);src[3][1][0].state['descripcion']='V\\xf1'
-        _,run=self.run_convert(source=src);dst=c.read_cex(run/'convertido_CE3X_2_3.cex');self.assertEqual(dst[3][1][0].state['descripcion'],'Vñ')
+        _,run=self.run_convert(source=src);dst=c.read_cex(run.output);self.assertEqual(dst[3][1][0].state['descripcion'],'Vñ')
     def test_inert_global_never_imports(self):
         r=c.InertUnpickler(io.BytesIO(b'cos\nsystem\n.'),encoding='latin1').load()
         self.assertEqual(r,c.GlobalRef('os','system'))
     def test_constructor_with_args_rejected(self):
         with self.assertRaises(c.ConversionError):c.InertUnpickler(io.BytesIO(b"(S'argumento'\nios\nsystem\n."),encoding='latin1').load()
-    def test_evidence_and_zip_history(self):
+    def test_diagnostic_export_includes_requested_evidence(self):
         _,run=self.run_convert();log=self.root/'cex.log';log.write_text('Error: partición',encoding='utf-8')
-        path=c.evidence(run,log,'Al editar Partición superior');c.evidence(run,notes='Segundo error')
+        path=run.export_diagnostic(self.root/'diagnostico.zip',notes='Al editar Partición superior',attachment=log)
         with zipfile.ZipFile(path) as z:
-            observations=[x for x in z.namelist() if x.endswith('_observacion.json')]
-            self.assertEqual(len(observations),2)
-            self.assertTrue(any(x.endswith('_adjunto.log') for x in z.namelist()))
+            observation=json.loads(z.read('errores_CE3X/observacion.json'))
+            self.assertEqual(observation['notes'],'Al editar Partición superior')
+            self.assertEqual(z.read('errores_CE3X/adjunto.log').decode(),'Error: partición')
+            self.assertEqual(json.loads(z.read('resultado.json'))['status'],'REVISAR')
+            self.assertIn('ROUNDTRIP_OK',z.read('conversion.log').decode())
+        self.assertFalse((self.root/'errores_CE3X').exists())
     def test_snapshots_exclude_personal_blocks_and_images(self):
         self.src[1][0]='PERSONAL_SECRETO';self.src[2][17]='IMAGEN_BASE64_SECRETA'
-        _,run=self.run_convert();snapshot=(run/'modelo_origen_tecnico.json').read_text(encoding='utf-8')
+        _,run=self.run_convert();snapshot=run.artifacts['modelo_origen_tecnico.json']
         self.assertNotIn('PERSONAL_SECRETO',snapshot);self.assertNotIn('IMAGEN_BASE64_SECRETA',snapshot)
 
     def test_decimal_roundtrip(self):
@@ -227,9 +230,9 @@ class ConverterTests(unittest.TestCase):
     def test_new_general_scalars_recorded(self):
         self.src[2][21:]=['','86.31','1','0','2']
         code,run=self.run_convert();self.assertEqual(code,0)
-        r=json.loads((run/'datos_no_transferidos.json').read_text())
+        r=run.audit.omitted
         self.assertTrue(any(x['path']=='blocks[2][21:]' and x['value']==['','86.31','1','0','2'] for x in r))
-        self.assertIn('W_GENERAL_32',(run/'conversion.log').read_text())
+        self.assertIn('W_GENERAL_32',run.audit.log_text())
     def test_extra_area_conflict_rejected(self):
         self.src[2][22]='200';self.assertFailure('E_AREA_32')
     def test_unknown_target_class_rejected(self):
@@ -253,8 +256,156 @@ class ConverterTests(unittest.TestCase):
     def test_extra_empty_report_field_removed(self):
         self.src[11].append('')
         code,run=self.run_convert();self.assertEqual(code,0)
-        self.assertEqual(len(c.read_cex(run/'convertido_CE3X_2_3.cex')[11]),7)
+        self.assertEqual(len(c.read_cex(run.output)[11]),7)
     def test_extra_active_report_field_rejected(self):
         self.src[11].append('datos nuevos');self.assertFailure('E_REPORT_FIELDS')
 
+    def test_success_creates_only_named_output_beside_source(self):
+        self.source_path = self.root / 'Vivienda con tildes á.ensayo.cex'
+        self.source_path.write_bytes(c.encoded(self.src))
+        self.template_path.write_bytes(c.encoded(self.template))
+        before = set(self.root.iterdir())
+        code, attempt = c.convert(self.source_path, self.template_path)
+        self.assertEqual(code, 0, attempt.summary)
+        self.assertEqual(attempt.output, self.root / 'Vivienda con tildes á.ensayo_CE3X2.3.cex')
+        self.assertEqual(set(self.root.iterdir()) - before, {attempt.output})
+
+    def test_failed_conversion_creates_no_files(self):
+        self.source_path.write_bytes(b'not a cex')
+        self.template_path.write_bytes(c.encoded(self.template))
+        before = set(self.root.iterdir())
+        code, attempt = c.convert(self.source_path, self.template_path)
+        self.assertEqual(code, 1)
+        self.assertTrue(attempt.traceback_text)
+        self.assertEqual(set(self.root.iterdir()), before)
+        self.assertFalse(attempt.output.exists())
+
+    def test_error_export_is_explicit_and_contains_traceback(self):
+        self.source_path.write_bytes(b'not a cex')
+        self.template_path.write_bytes(c.encoded(self.template))
+        _, attempt = c.convert(self.source_path, self.template_path)
+        destination = self.root / 'error.zip'
+        self.assertFalse(destination.exists())
+        attempt.export_diagnostic(destination)
+        with zipfile.ZipFile(destination) as archive:
+            self.assertIn('E_FORMAT', archive.read('traceback.txt').decode())
+            self.assertEqual(json.loads(archive.read('resultado.json'))['status'], 'ERROR')
+        self.assertFalse(list(self.root.glob('*.log')))
+        self.assertFalse(list(self.root.glob('*.partial')))
+
+    def test_existing_output_requires_explicit_overwrite(self):
+        self.source_path.write_bytes(c.encoded(self.src))
+        self.template_path.write_bytes(c.encoded(self.template))
+        target = c.output_path(self.source_path)
+        target.write_bytes(b'previous conversion')
+        code, attempt = c.convert(self.source_path, self.template_path)
+        self.assertEqual(code, 1)
+        self.assertEqual(attempt.manifest['error_code'], 'E_OUTPUT_EXISTS')
+        self.assertEqual(target.read_bytes(), b'previous conversion')
+        code, attempt = c.convert(self.source_path, self.template_path, overwrite=True)
+        self.assertEqual(code, 0, attempt.summary)
+        self.assertEqual(len(c.read_cex(target)), 15)
+
+    def test_failed_overwrite_preserves_previous_output(self):
+        self.source_path.write_bytes(b'not a cex')
+        self.template_path.write_bytes(c.encoded(self.template))
+        target = c.output_path(self.source_path)
+        target.write_bytes(b'previous conversion')
+        code, _ = c.convert(self.source_path, self.template_path, overwrite=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(target.read_bytes(), b'previous conversion')
+
+    def test_roundtrip_failure_leaves_no_partial_output(self):
+        self.source_path.write_bytes(c.encoded(self.src))
+        self.template_path.write_bytes(c.encoded(self.template))
+        before = set(self.root.iterdir())
+        reader = c.read_cex
+        def damaged(path, *args):
+            value = reader(path, *args)
+            if str(path).endswith('.partial'):
+                value[2][6] = '999999'
+            return value
+        with mock.patch.object(c, 'read_cex', side_effect=damaged):
+            code, attempt = c.convert(self.source_path, self.template_path)
+        self.assertEqual(code, 1)
+        self.assertEqual(attempt.manifest['error_code'], 'E_ROUNDTRIP')
+        self.assertEqual(set(self.root.iterdir()), before)
+
+    def test_changed_input_is_rejected_before_output_publication(self):
+        self.source_path.write_bytes(c.encoded(self.src))
+        self.template_path.write_bytes(c.encoded(self.template))
+        before = set(self.root.iterdir())
+        real_sha = c.sha
+        seen = 0
+        def changing(path):
+            nonlocal seen
+            if Path(path) == self.source_path:
+                seen += 1
+                if seen > 1:
+                    return 'changed'
+            return real_sha(path)
+        with mock.patch.object(c, 'sha', side_effect=changing):
+            code, attempt = c.convert(self.source_path, self.template_path)
+        self.assertEqual(code, 1)
+        self.assertEqual(attempt.manifest['error_code'], 'E_INPUT_CHANGED')
+        self.assertEqual(set(self.root.iterdir()), before)
+
+    def test_diagnostic_collision_preserves_previous_zip(self):
+        _, attempt = self.run_convert()
+        destination = self.root / 'diagnostico.zip'
+        destination.write_bytes(b'existing diagnostic')
+        with self.assertRaises(FileExistsError):
+            attempt.export_diagnostic(destination)
+        self.assertEqual(destination.read_bytes(), b'existing diagnostic')
+        self.assertFalse(list(self.root.glob('*.partial')))
+
+    def test_missing_attachment_does_not_create_diagnostic(self):
+        _, attempt = self.run_convert()
+        destination = self.root / 'diagnostico.zip'
+        with self.assertRaises(c.ConversionError):
+            attempt.export_diagnostic(destination, attachment=self.root / 'missing.log')
+        self.assertFalse(destination.exists())
+
+    def test_persistent_worker_exports_error_only_on_request(self):
+        self.source_path.write_bytes(b'invalid')
+        self.template_path.write_bytes(c.encoded(self.template))
+        destination = self.root / 'error.zip'
+        commands = [
+            {'command': 'convert', 'source': str(self.source_path), 'template': str(self.template_path)},
+            {'command': 'diagnostic', 'destination': str(destination), 'notes': 'Error con eñe y "comillas"\nAl abrir CE3X'},
+            {'command': 'exit'},
+        ]
+        responses = io.StringIO()
+        c.serve(io.StringIO(''.join(json.dumps(item) + '\n' for item in commands)), responses)
+        lines = responses.getvalue().splitlines()
+        self.assertTrue(lines[0].startswith('ERROR\t'))
+        self.assertTrue(lines[1].startswith('GUARDADO\t'))
+        with zipfile.ZipFile(destination) as archive:
+            self.assertEqual(json.loads(archive.read('errores_CE3X/observacion.json'))['notes'], commands[1]['notes'])
+        self.assertFalse(list(self.root.glob('*.log')))
+
+    def test_worker_rejects_export_without_a_conversion(self):
+        destination = self.root / 'no.zip'
+        response = io.StringIO()
+        c.serve(io.StringIO(json.dumps({'command': 'diagnostic', 'destination': str(destination)}) + '\n'), response)
+        self.assertIn('Primero realiza una conversion', response.getvalue())
+        self.assertFalse(destination.exists())
+
+    def test_worker_subprocess_handles_unicode_paths_without_logs(self):
+        import subprocess
+        self.source_path = self.root / 'Origen á ñ.cex'
+        self.source_path.write_bytes(c.encoded(self.src))
+        self.template_path.write_bytes(c.encoded(self.template))
+        commands = [{'command': 'convert', 'source': str(self.source_path), 'template': str(self.template_path)},
+                    {'command': 'exit'}]
+        result = subprocess.run([sys.executable, '-I', '-X', 'utf8', '-B', '-u', str(c.ROOT / 'converter.py'), 'serve'],
+                                input=''.join(json.dumps(item) + '\n' for item in commands),
+                                capture_output=True, text=True, encoding='utf-8', timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith('REVISAR\t'), result.stdout)
+        self.assertIn('Origen á ñ_CE3X2.3.cex', result.stdout)
+        self.assertEqual(set(self.root.iterdir()), {self.source_path, self.template_path, c.output_path(self.source_path)})
+
+
 if __name__=='__main__':unittest.main(verbosity=2)
+
