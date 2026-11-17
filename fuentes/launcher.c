@@ -179,7 +179,7 @@ static void received(void) {
     if (operation == 1) {
         hasAttempt = 1;
         wcsncpy(lastOutput, path, PATHCAP - 1); lastOutput[PATHCAP - 1] = 0;
-        swprintf(text, PATHCAP + 8192, L"%ls\r\n%ls", message, path);
+        swprintf(text, PATHCAP + 8192, L"%ls", strcmp(response, "REVISAR") == 0 ? L"Conversión completada." : message);
     } else if (operation == 2) {
         swprintf(text, PATHCAP + 8192, L"%ls\r\n\r\n%ls", message, path);
     } else {

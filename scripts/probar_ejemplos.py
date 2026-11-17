@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import shutil
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 import converter as c
@@ -31,10 +32,15 @@ def inspect_examples(directory, report_path):
             record.update(blocks=len(blocks), envelope_count=len(blocks[3][0]),
                           window_count=len(blocks[3][1]), bridge_count=len(blocks[3][2]),
                           shadow_patterns=len(blocks[9]), shadow_names=c.json_value(blocks[10]),
+                          general_surface=c.json_value(blocks[2][6]), general_extra_fields=c.json_value(blocks[2][21:]),
                           improvement_count=len(blocks[5]))
             if str(header) != 'CE3Xv3.2 Residencial':
                 record['conversion'] = 'not_32_residential'
                 continue
+            fixture_folder = report_path.parent / 'muestras_oficiales'
+            fixture_folder.mkdir(exist_ok=True)
+            fixture = fixture_folder / (record['sha256'] + '.cex')
+            if not fixture.exists(): shutil.copyfile(source, fixture)
             code, attempt = c.convert(source, c.ROOT / 'plantilla_23.cex')
             record['conversion'] = attempt.manifest['status']
             if code:

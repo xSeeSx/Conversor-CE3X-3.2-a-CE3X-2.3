@@ -89,5 +89,5 @@ jobs:
           name: Conversor_CE3X_1_4_1_artefactos
           path: |
             _release/*
-            _validacion/*
+            _validacion/**
           retention-days: 14
