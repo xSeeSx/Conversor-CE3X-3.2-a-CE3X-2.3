@@ -51,6 +51,22 @@ jobs:
           if ($process.ExitCode -ne 0 -or (Get-Content $resultPath -Raw).Trim() -ne 'OK') {
             throw 'Fallo de comunicacion entre el ejecutable y Python.'
           }
+      - name: Probar decisiones desde la interfaz y el motor portatil
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path _validacion -Force | Out-Null
+          python -c "import sys; from pathlib import Path; sys.path.insert(0,'fuentes'); import test_converter as t; x=t.ConverterTests(); x.setUp(); x.solar_fixture(); Path('_validacion/solar_sintetica.cex').write_bytes(t.c.encoded(x.src)); x.tearDown()"
+          if ($LASTEXITCODE -ne 0) { throw 'Fallo al crear la muestra sintetica.' }
+          foreach ($choice in @('adapt','omit','cancel')) {
+            $source = "$pwd/_validacion/solar_$choice.cex"
+            Copy-Item _validacion/solar_sintetica.cex $source
+            $marker = "$pwd/_validacion/decision_$choice.txt"
+            $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--smoke-decision', $source, $choice, $marker) -PassThru -Wait
+            if ($process.ExitCode -ne 0 -or (Get-Content $marker -Raw).Trim() -ne 'OK') { throw "Fallo de decision nativa: $choice" }
+            $output = "$pwd/_validacion/solar_${choice}_CE3X2.3.cex"
+            if ($choice -eq 'cancel' -and (Test-Path $output)) { throw 'Cancelar ha generado una salida.' }
+            if ($choice -ne 'cancel' -and -not (Test-Path $output)) { throw 'No se ha generado la salida elegida.' }
+          }
       - name: Revisar ejemplos oficiales de CE3X 3.2
         shell: pwsh
         run: |
@@ -83,10 +99,19 @@ jobs:
           try { $image.Save("$pwd/_release/vista_previa.png", [System.Drawing.Imaging.ImageFormat]::Png) }
           finally { $image.Dispose() }
           Remove-Item $bitmapPath
+          foreach ($mode in @('adapt', 'omit')) {
+            $bitmapPath = "$pwd/_release/decision_$mode.bmp"
+            $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--preview-decision', $bitmapPath, $mode) -PassThru -Wait
+            if ($process.ExitCode -ne 0) { throw 'No se pudo capturar el dialogo de decision.' }
+            $image = [System.Drawing.Image]::FromFile($bitmapPath)
+            try { $image.Save("$pwd/_release/decision_$mode.png", [System.Drawing.Imaging.ImageFormat]::Png) }
+            finally { $image.Dispose() }
+            Remove-Item $bitmapPath
+          }
       - name: Conservar paquete y vista previa
         uses: actions/upload-artifact@v4
         with:
-          name: Conversor_CE3X_1_4_1_artefactos
+          name: Conversor_CE3X_1_5_0_artefactos
           path: |
             _release/*
             _validacion/**

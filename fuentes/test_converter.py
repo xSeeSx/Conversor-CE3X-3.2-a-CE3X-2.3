@@ -444,5 +444,102 @@ class ConverterTests(unittest.TestCase):
         self.src[2][22]='-1'
         self.assertFailure('E_NUMBER')
 
+    def solar_fixture(self, monthly=None, ident=91):
+        self.src[2][4]='D2';self.src[2][6]='100';self.src[2][9]='100'
+        self.src[4]=[[] for _ in range(14)]
+        self.src[4][0]=[['ACS','ACS',['100','',''],'Efecto Joule','Electricidad',
+                        [['100','100'],['',''],['','']],'Conocido (Ensayado/justificado)',
+                        ['100','',''],[False],'Edificio Objeto']]
+        state=dict(zip(c.SOLAR_MONTHS,monthly or [117.7715]*12))
+        state.update(nombre='Solar',zona='Edificio Objeto',potencia=1,servicio=None,tipo=None,
+                     consumoMensual=None,id=c.CexObject(c.GlobalRef('uuid','UUID'),{'int':ident},'reduce'))
+        self.src[4][12]=[c.CexObject(c.GlobalRef('models','GeneradorTermosolar'),state)]
+        return self.src[4][12][0]
+    def solar_convert(self, choices=None):
+        self.source_path.write_bytes(c.encoded(self.src));self.template_path.write_bytes(c.encoded(self.template))
+        return c.convert(self.source_path,self.template_path,solar_choices=choices)
+    def test_solar_requires_choice_and_creates_no_output_or_log(self):
+        self.solar_fixture();code,a=self.solar_convert()
+        self.assertEqual(code,2);self.assertEqual(a.manifest['status'],'DECISION')
+        self.assertAlmostEqual(a.manifest['pending_solar']['candidate']['percent'],70)
+        self.assertEqual(set(self.root.iterdir()),{self.source_path,self.template_path})
+    def test_solar_adaptation_preserves_annual_effect_of_tested_ce3x_cases(self):
+        for values,expected in [([117.7715]*12,70),([0]*6+[1413.258]+[0]*5,70),(list(range(10,22)),9.21275520817855)]:
+            with self.subTest(values=values):
+                self.solar_fixture(values);code,a=self.solar_convert({'91':'adapt'})
+                self.assertEqual(code,0,a.summary)
+                dst=c.read_cex(a.output);self.assertAlmostEqual(float(dst[4][6][0][2][0]),expected,places=9)
+                self.assertEqual(len(dst[4]),12);self.assertIn('Adaptado',a.manifest['decision_summary'])
+                self.assertEqual(len(c.read_cex(self.source_path)[4][12]),1)
+                a.output.unlink()
+    def test_solar_omission_is_explicit_and_preserves_main_equipment(self):
+        self.solar_fixture();before=c.typed_value(self.src[4][0])
+        code,a=self.solar_convert({'91':'omit'});self.assertEqual(code,0,a.summary)
+        dst=c.read_cex(a.output);self.assertEqual(dst[4][6],[])
+        self.assertEqual(c.typed_value(dst[4][0]),before)
+        self.assertTrue(a.manifest['results_require_recalculation'])
+    def test_solar_unsupported_storage_cannot_be_adapted_but_can_be_omitted(self):
+        self.solar_fixture();self.src[4][0][0][8]=[True,'100','80','60','5','Por defecto']
+        code,a=self.solar_convert();self.assertIsNone(a.manifest['pending_solar']['candidate'])
+        code,a=self.solar_convert({'91':'adapt'});self.assertEqual(code,1);self.assertEqual(a.manifest['error_code'],'E_SOLAR_SCOPE')
+        code,a=self.solar_convert({'91':'omit'});self.assertEqual(code,0,a.summary)
+    def test_solar_unvalidated_climate_or_excess_is_not_offered(self):
+        self.solar_fixture();self.src[2][4]='C3'
+        self.assertIsNone(c.solar_issues(self.src)[0]['candidate'])
+        self.solar_fixture([1000]*12)
+        self.assertIsNone(c.solar_issues(self.src)[0]['candidate'])
+    def test_solar_overflow_does_not_offer_adaptation(self):
+        self.solar_fixture([1e308]*12);self.src[2][9]='1e308'
+        self.assertIsNone(c.solar_issues(self.src)[0]['candidate'])
+    def test_solar_stale_choice_and_changed_file_rejected(self):
+        self.solar_fixture();code,a=self.solar_convert({'unknown':'omit'})
+        self.assertEqual(code,1)
+        code,a=c.convert(self.source_path,self.template_path,solar_choices={'91':'adapt'},expected_source_sha='old')
+        self.assertEqual(a.manifest['error_code'],'E_INPUT_CHANGED');self.assertFalse(a.output.exists())
+    def test_empty_report_is_native_and_preserved(self):
+        self.src[11]=[];code,a=self.run_convert();self.assertEqual(code,0,a.summary)
+        self.assertEqual(c.read_cex(a.output)[11],[])
+    def solar_measure_fixture(self):
+        self.solar_fixture();systems=copy.deepcopy(self.src[4]);self.src[4][12]=[]
+        m=self.fixture_measure('MM Solar');m.state['mejoras'][1][1]=systems
+        m.state['datosInstalaciones']=systems
+        for key,entries in zip(c.MM_SYSTEM_KEYS,systems):m.state[key]=entries
+        m.state['listadoGeneradoresTermosolarMM']=systems[12]
+        self.src[5]=[m]
+        self.src[6][2]=[['Instalacion','MM Solar','Instalaciones','20','1500','0']]
+        self.src[11][0]='MM Solar'
+        return m
+    def test_solar_measure_adapts_all_definition_copies(self):
+        self.solar_measure_fixture();code,a=self.solar_convert({'91':'adapt'})
+        self.assertEqual(code,0,a.summary);m=c.read_cex(a.output)[5][0]
+        for rows in [m.state['sistemasContribucionesMM'],m.state['datosInstalaciones'][6],m.state['mejoras'][1][1][6]]:
+            self.assertEqual(len(rows),1);self.assertEqual(rows[0][2][0],'70')
+        self.assertEqual(len(m.state['datosInstalaciones']),12)
+    def test_solar_omit_measure_removes_report_and_cost_references(self):
+        self.solar_measure_fixture();code,a=self.solar_convert({'91':'omit'})
+        self.assertEqual(code,0,a.summary);dst=c.read_cex(a.output)
+        self.assertEqual(dst[5],[]);self.assertEqual(dst[6][2],[]);self.assertEqual(dst[11][0],'')
+    def test_solar_pipe_cancel_produces_no_file(self):
+        self.solar_fixture();self.solar_convert()
+        responses=io.StringIO()
+        commands=[{'command':'convert','source':str(self.source_path),'template':str(self.template_path)},
+                  {'command':'decision','id':'91','choice':'cancel'}]
+        c.serve(io.StringIO(''.join(json.dumps(x)+'\n' for x in commands)),responses)
+        self.assertIn('DECISION_ADAPT\t91\t',responses.getvalue())
+        self.assertIn('CANCELADO\t\t',responses.getvalue());self.assertFalse(c.output_path(self.source_path).exists())
+    def test_solar_pipe_adapt_summary_and_diagnostic_decision(self):
+        self.solar_fixture();self.solar_convert();responses=io.StringIO()
+        dest=self.root/'diagnostic.zip'
+        commands=[{'command':'convert','source':str(self.source_path),'template':str(self.template_path)},
+                  {'command':'decision','id':'91','choice':'adapt'},
+                  {'command':'diagnostic','destination':str(dest)}]
+        c.serve(io.StringIO(''.join(json.dumps(x)+'\n' for x in commands)),responses)
+        self.assertIn('REVISAR_CAMBIOS\t',responses.getvalue());self.assertIn('Adaptado: Solar',responses.getvalue())
+        with zipfile.ZipFile(dest) as z:
+            manifests=[n for n in z.namelist() if n.endswith('resultado.json')]
+            self.assertTrue(manifests)
+            manifest=json.loads(z.read(manifests[0]));self.assertEqual(manifest['solar_decisions'][0]['choice'],'adapt')
+
+
 if __name__=='__main__':unittest.main(verbosity=2)
 

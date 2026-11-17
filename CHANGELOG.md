@@ -2,6 +2,16 @@
 
 Las versiones publicadas y sus descargas están en [Releases](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases).
 
+## 1.5.0
+
+- Aviso previo para generadores termosolares: Adaptar, Omitir lo indicado o Cancelar. No genera salida sin decidir.
+- Adaptación anual a cobertura ACS en la configuración ensayada de efecto Joule eléctrico sin acumulación en D2, tanto en edificio como en mejora solar independiente.
+- Adaptar deshabilitado en casos no validados. Omitir una mejora elimina el conjunto completo y sus referencias de costes e informe, según advierte el diálogo.
+- Resumen visible de las decisiones, exportadas al diagnóstico únicamente si se solicita.
+- Comprueba que el origen no cambie durante las decisiones.
+- Acepta el informe vacío observado en archivos nativos de ambas versiones.
+- Documentación de los ensayos de producción mensual y mejoras.
+
 ## 1.4.1, 2026-11-17
 
 - Ventana inicial más baja: se elimina la fila de salida y el texto explicativo repetido.
