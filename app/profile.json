@@ -19,6 +19,8 @@
     "Suelo|terreno": 17,
     "Partición Interior|horizontal superior": 15,
     "Partición Interior|vertical": 15,
-    "Partición Interior|horizontal inferior": 15
+    "Partición Interior|horizontal inferior": 15,
+    "Fachada|terreno": 15,
+    "Cubierta|terreno": 15
   }
 }

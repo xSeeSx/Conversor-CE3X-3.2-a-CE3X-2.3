@@ -221,6 +221,24 @@ class ConverterTests(unittest.TestCase):
         self.partition_fixture();self.src[3][0][0].insert(5,'campo desconocido');self.assertFailure('E_ENVELOPE_ROW',self.src)
     def test_unknown_partition_contact_still_rejected(self):
         self.partition_fixture();self.src[3][0][0][-1]='inclinado desconocido';self.assertFailure('E_ENVELOPE_UNKNOWN',self.src)
+    def test_all_ten_envelope_types_preserved(self):
+        fixtures=[
+            ['Fachada aire','Fachada','20',1.4,200,'Norte','','Sin patrón','Por defecto',[],'8','2.5','1','Edificio Objeto','aire'],
+            ['Medianeria','Fachada','20',0,200,'','','Sin patrón','8','2.5','1','Edificio Objeto','edificio'],
+            ['Muro enterrado','Fachada','20',1.4,200,'1','','Sin patrón','Conocidas',['1.4'],'8','2.5','1','Edificio Objeto','terreno'],
+            ['Cubierta aire','Cubierta','20',1.0,344,'Techo','','Sin patrón','Por defecto',['Cubierta plana'],'5','4','1','Edificio Objeto','aire'],
+            ['Cubierta enterrada','Cubierta','20',1.0,344,'0.5','','Sin patrón','Conocidas',['1.0'],'5','4','1','Edificio Objeto','terreno'],
+            ['Suelo aire','Suelo','20',1.0,344,'Suelo','','Sin patrón','Conocidas',['1.0'],'5','4','1','Edificio Objeto','aire'],
+            ['Suelo terreno','Suelo','20',1.0,750,'Suelo','','Sin patrón','Por defecto',True,'',[],'5','4','1','Edificio Objeto','terreno'],
+        ]
+        rows=json.loads((Path(__file__).parent/'fixtures/particiones_oficiales_23.json').read_text(encoding='utf-8'))['rows']
+        fixtures += [copy.deepcopy(next(r for r in rows if r[-1]==contact)) for contact in ('vertical','horizontal inferior')]
+        fixtures += [copy.deepcopy(self.src[3][0][0])]
+        self.src[3]=[fixtures,[],[],[]]
+        code,run=self.run_convert();self.assertEqual(code,0,run.summary)
+        dst=c.read_cex(run.output);self.assertEqual(c.json_value(dst[3][0]),fixtures)
+        self.assertEqual(len({(r[1],r[-1]) for r in dst[3][0]}),10)
+        self.assertEqual(len(self.profile['envelope_lengths']),10)
     def test_unknown_envelope(self):
         src=copy.deepcopy(self.src);src[3][0][0][-1]='nuevo contacto';self.assertFailure('E_ENVELOPE_UNKNOWN',src)
     def test_unknown_system_shape(self):

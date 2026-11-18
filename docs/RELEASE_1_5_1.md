@@ -1,6 +1,7 @@
 ## Corregido
 
 - Rechazo de particiones interiores verticales y horizontales inferiores que ya existen en CE3X 2.3.
+- Ampliado el catálogo a las diez tipologías de cerramiento: fachadas, medianerías, muros enterrados, cubiertas sobre aire o terreno, suelos sobre aire o terreno y las tres particiones interiores. Las estructuras desconocidas se siguen rechazando.
 - Aviso previo para los tres campos nuevos de protección solar de los huecos, cuando no se combinan con otras sombras ni medidas de mejora.
 
 Si esos campos están activos, el programa ofrece **Omitir lo indicado** o **Cancelar**. Omitir conserva las ventanas y sus puentes, retira únicamente la protección nueva y restablece los factores solares a 1 al no quedar ninguna otra protección. Esto puede cambiar la demanda y exige revisar y recalcular en CE3X 2.3. No se ofrece una equivalencia calculada ni se borra información sin aceptar el aviso.

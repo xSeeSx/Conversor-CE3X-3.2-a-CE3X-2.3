@@ -3,6 +3,7 @@
 ## 1.5.1 - 2026-11-18
 
 - Corregido el rechazo de particiones interiores verticales y horizontales inferiores compatibles con CE3X 2.3.
+- Ampliado el catálogo de cerramientos a diez tipologías, incluyendo muros y cubiertas en contacto con el terreno.
 - Contrastada su estructura de 15 campos con las particiones del ejemplo oficial nativo 2.3. Los datos se conservan sin transformar sus valores.
 - Aviso y decisión explícita antes de omitir las protecciones solares nuevas sin equivalente ensayado, sin dejar factores solares incoherentes.
 - Añadidas pruebas de conservación y rechazo de estructuras desconocidas. No cambia el ámbito residencial del conversor.
