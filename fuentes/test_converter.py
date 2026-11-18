@@ -239,6 +239,15 @@ class ConverterTests(unittest.TestCase):
         dst=c.read_cex(run.output);self.assertEqual(c.json_value(dst[3][0]),fixtures)
         self.assertEqual(len({(r[1],r[-1]) for r in dst[3][0]}),10)
         self.assertEqual(len(self.profile['envelope_lengths']),10)
+    def test_native_nested_zones_preserved(self):
+        zone=lambda name,parent,area:c.CexObject(c.GlobalRef('ventanaSubgrupo','claseZona'),
+             {'nombre':name,'raiz':parent,'tipo':'Subgrupo','superficie':area})
+        self.src[3][3]=[zone('Planta baja','Edificio Objeto','80'),zone('Vivienda','Planta baja','46.10')]
+        self.src[3][0][0][-2]='Vivienda';self.src[3][1][0].state['subgrupo']='Vivienda'
+        code,run=self.run_convert();self.assertEqual(code,0,run.summary)
+        dst=c.read_cex(run.output)
+        self.assertEqual(c.typed_value(dst[3][3]),c.typed_value(self.src[3][3]))
+        self.assertEqual(dst[3][0][0][-2],'Vivienda');self.assertEqual(dst[3][1][0].state['subgrupo'],'Vivienda')
     def test_unknown_envelope(self):
         src=copy.deepcopy(self.src);src[3][0][0][-1]='nuevo contacto';self.assertFailure('E_ENVELOPE_UNKNOWN',src)
     def test_unknown_system_shape(self):

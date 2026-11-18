@@ -1,5 +1,7 @@
 ## Corregido
 
+- Admitida la clase nativa de zonas, incluidas agrupaciones anidadas, sin alterar sus relaciones.
+
 - Rechazo de particiones interiores verticales y horizontales inferiores que ya existen en CE3X 2.3.
 - Ampliado el catálogo a las diez tipologías de cerramiento: fachadas, medianerías, muros enterrados, cubiertas sobre aire o terreno, suelos sobre aire o terreno y las tres particiones interiores. Las estructuras desconocidas se siguen rechazando.
 - Aviso previo para los tres campos nuevos de protección solar de los huecos, cuando no se combinan con otras sombras ni medidas de mejora.

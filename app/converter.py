@@ -658,7 +658,8 @@ def window_protection_issues(source):
     if not indices:return []
     require(not source[5],'E_ACTIVE_SOLAR','Protecciones nuevas con medidas de mejora: falta contrastar sus copias y referencias')
     active=sum(source[3][1][i].state['tieneProteccionSolar'] for i in indices)
-    names=', '.join(str(source[3][1][i].state.get('descripcion',i+1)) for i in indices)
+    names=', '.join(str(source[3][1][i].state.get('descripcion',i+1))[:100] for i in indices[:6])
+    if len(indices)>6:names+=f' y {len(indices)-6} mas'
     return [{'id':'window-protection:building','kind':'window_protection','name':'Protecciones solares nuevas en huecos',
              'context':'edificio','candidate':None,'window_indices':indices,
              'message':f'{len(indices)} huecos tienen configuracion adicional de proteccion solar 3.2 ({active} con la proteccion activada): '+names+'. '
@@ -874,6 +875,7 @@ def validate_target_classes(blocks):
         ('Envolvente.objetosEnvolvente','HuecoConocidas'),
         ('Envolvente.objetosEnvolvente','HuecoEstimadas'),
         ('LibreriasCE3X.menuCerramientos','composicionCerramiento'),
+        ('ventanaSubgrupo','claseZona'),
     }
     allowed.update(tuple(name.rsplit('.',1)) for name in mm_schema())
     visited=set()
