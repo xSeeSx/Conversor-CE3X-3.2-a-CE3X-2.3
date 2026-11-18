@@ -162,6 +162,36 @@ class ConverterTests(unittest.TestCase):
         src=copy.deepcopy(self.src);src[0]='CEXv2.3 Residencial';self.assertFailure('E_SOURCE_VERSION',src)
     def test_active_new_system_group(self):
         src=copy.deepcopy(self.src);src[4][13]=[['nuevo']];self.assertFailure('E_NEW_SYSTEM',src)
+    def blind_fixture(self):
+        state=self.src[3][1][0].state
+        state.update(elementosProteccionSolar=['']*6+[['',0,0],['',0,0],'',False,False,'',False,False,'','','',False,False,False,False,False,False,False,['',''],True,'Manuales','Blanco'],
+                     tieneProteccionSolar=True,correctorFSCTE=.19575,correctorFSInvierno=1.0,correctorFSVerano=.19575)
+    def test_new_window_protection_requires_explicit_decision(self):
+        self.blind_fixture();code,run=self.run_convert();self.assertEqual(code,2);self.assertFalse(run.output.exists())
+        self.assertEqual(run.manifest['pending_solar']['id'],'window-protection:building')
+        self.assertIsNone(run.manifest['pending_solar']['candidate'])
+    def test_omit_new_window_protection_resets_only_solar_properties(self):
+        self.blind_fixture();windows=self.src[3][1];self.partition_fixture();self.src[3][1]=windows
+        self.src[3][1][0].state['cerramientoAsociado']=self.src[3][0][0][0]
+        self.source_path.write_bytes(c.encoded(self.src));before=self.source_path.read_bytes()
+        code,run=c.convert(self.source_path,c.ROOT/'plantilla_23.cex',solar_choices={'window-protection:building':'omit'})
+        self.assertEqual(code,0,run.summary);dst=c.read_cex(run.output);state=dst[3][1][0].state
+        self.assertEqual(len(state['elementosProteccionSolar']),25);self.assertFalse(state['tieneProteccionSolar'])
+        for key in ('correctorFSCTE','correctorFSInvierno','correctorFSVerano'):self.assertEqual(state[key],1.0)
+        self.assertEqual(c.json_value(dst[3][0]),c.json_value(self.src[3][0]));self.assertEqual(dst[3][2],self.src[3][2])
+        self.assertEqual(self.source_path.read_bytes(),before)
+        self.assertTrue(run.manifest['results_require_recalculation'])
+    def test_new_window_protection_combined_shading_stays_blocked(self):
+        self.blind_fixture();self.src[3][1][0].state['elementosProteccionSolar'][0]='1.5';self.assertFailure('E_ACTIVE_SOLAR')
+    def test_window_protection_with_improvements_stays_blocked(self):
+        self.blind_fixture();self.src[5]=[self.fixture_measure()];self.assertFailure('E_ACTIVE_SOLAR')
+    def test_window_protection_cannot_be_adapted_silently(self):
+        self.blind_fixture();self.source_path.write_bytes(c.encoded(self.src))
+        code,run=c.convert(self.source_path,c.ROOT/'plantilla_23.cex',solar_choices={'window-protection:building':'adapt'})
+        self.assertEqual(code,1);self.assertEqual(run.manifest['error_code'],'E_SOLAR_SCOPE');self.assertFalse(run.output.exists())
+    def test_window_protection_cancel_does_not_write(self):
+        self.blind_fixture();self.source_path.write_bytes(c.encoded(self.src));inp=io.StringIO(json.dumps({'command':'convert','source':str(self.source_path)})+'\n'+json.dumps({'command':'decision','id':'window-protection:building','choice':'cancel'})+'\n');out=io.StringIO()
+        c.serve(inp,out);self.assertIn('DECISION_OMIT',out.getvalue());self.assertIn('CANCELADO',out.getvalue());self.assertFalse(c.output_path(self.source_path).exists())
     def test_active_new_solar_option(self):
         src=copy.deepcopy(self.src);src[3][1][0].state['elementosProteccionSolar'][-1]='activo';self.assertFailure('E_ACTIVE_SOLAR',src)
     def test_new_general_field(self):

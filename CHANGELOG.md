@@ -4,6 +4,7 @@
 
 - Corregido el rechazo de particiones interiores verticales y horizontales inferiores compatibles con CE3X 2.3.
 - Contrastada su estructura de 15 campos con las particiones del ejemplo oficial nativo 2.3. Los datos se conservan sin transformar sus valores.
+- Aviso y decisión explícita antes de omitir las protecciones solares nuevas sin equivalente ensayado, sin dejar factores solares incoherentes.
 - Añadidas pruebas de conservación y rechazo de estructuras desconocidas. No cambia el ámbito residencial del conversor.
 
 

@@ -634,8 +634,43 @@ def solar_candidate(generators, systems, general, envelope_changes=False):
         return None,str(exc)
 
 
+def neutral_legacy_protection(values):
+    baseline=['']*6+[['',0,0],['',0,0],'',False,False,'',False,False,'','','',False,False,False,False,False,False,False,['','']]
+    return isinstance(values,list) and values==baseline
+
+
+def window_protection_issues(source):
+    indices=[]
+    for i,w in enumerate(source[3][1]):
+        values=w.state.get('elementosProteccionSolar')
+        if not isinstance(values,list) or len(values)!=28 or all(empty(v) for v in values[25:]):continue
+        tail=values[25:]
+        require(tail[0] is True and all(isinstance(v,str) and len(v)<=128 for v in tail[1:]),
+                'E_ACTIVE_SOLAR','Campos de proteccion solar 3.2 no reconocidos',f'huecos[{i}]')
+        require(neutral_legacy_protection(values[:25]) and w.state.get('patronSombras','Sin patrón') in ('','Sin patrón'),
+                'E_ACTIVE_SOLAR','Proteccion nueva combinada con otras sombras: no se ha validado su omision',f'huecos[{i}]')
+        require(isinstance(w.state.get('tieneProteccionSolar'),bool),
+                'E_ACTIVE_SOLAR','Indicador de proteccion solar desconocido',f'huecos[{i}]')
+        for field in ('correctorFSCTE','correctorFSInvierno','correctorFSVerano'):
+            require(field in w.state,'E_ACTIVE_SOLAR','Falta un factor solar necesario para omitir la proteccion',f'huecos[{i}].{field}')
+            as_num(w.state[field],f'huecos[{i}].{field}',minimum=0)
+        indices.append(i)
+    if not indices:return []
+    require(not source[5],'E_ACTIVE_SOLAR','Protecciones nuevas con medidas de mejora: falta contrastar sus copias y referencias')
+    active=sum(source[3][1][i].state['tieneProteccionSolar'] for i in indices)
+    names=', '.join(str(source[3][1][i].state.get('descripcion',i+1)) for i in indices)
+    return [{'id':'window-protection:building','kind':'window_protection','name':'Protecciones solares nuevas en huecos',
+             'context':'edificio','candidate':None,'window_indices':indices,
+             'message':f'{len(indices)} huecos tienen configuracion adicional de proteccion solar 3.2 ({active} con la proteccion activada): '+names+'. '
+                       'CE3X 2.3 no tiene estos tres campos. No se ofrece una equivalencia calculada. '
+                       'Omitir elimina SOLO esta proteccion nueva, conserva las ventanas, sus propiedades y los puentes termicos, '
+                       'y restablece a 1 los factores solares al no quedar otra proteccion definida. '
+                       'Puede cambiar la demanda de refrigeracion. Revisa y recalcula en CE3X 2.3. '
+                       'Cancelar no genera salida. El original se conserva.'}]
+
+
 def solar_issues(source):
-    issues=[]
+    issues=window_protection_issues(source)
     contexts=[('edificio',source[4],source[2],False)]
     for i,m in enumerate(source[5]):
         if not isinstance(m,CexObject):continue
@@ -679,6 +714,18 @@ def resolve_solar(source, choices, audit, manifest):
         require(choice!='adapt' or issue['candidate'] is not None,'E_SOLAR_SCOPE','Esta adaptacion no esta validada')
     if not issues:return source
     out=copy.deepcopy(source)
+    for issue in issues:
+        if issue.get('kind')!='window_protection':continue
+        require(choices[issue['id']]=='omit','E_SOLAR_SCOPE','Esta proteccion solo admite omision explicita o cancelar')
+        for i in issue['window_indices']:
+            state=out[3][1][i].state;path=f'huecos[{i}]'
+            audit.omit(path+'.elementosProteccionSolar[25:]',state['elementosProteccionSolar'][25:],
+                       'Omision explicitamente aceptada de la proteccion solar nueva')
+            state['elementosProteccionSolar'][25:]=[False,'','']
+            for key,value in [('tieneProteccionSolar',False),('correctorFSCTE',1.0),('correctorFSInvierno',1.0),('correctorFSVerano',1.0)]:
+                audit.change('OMIT_WINDOW_PROTECTION',path+'.'+key,state[key],value,
+                             'Sin otra proteccion solar ni patron de sombras en el hueco')
+                state[key]=value
     manifest['solar_decisions']=[dict(item,choice=choices[item['id']]) for item in issues]
     def row(item):
         return [item['name']+' (adaptado 2.3)',LegacyString('Contribuciones energéticas'),

@@ -3,6 +3,8 @@ name: Comprobar motor e interfaz Windows
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -39,7 +41,7 @@ jobs:
         run: |
           $stage23 = Join-Path $env:RUNNER_TEMP 'ce3x23'
           New-Item -ItemType Directory -Path $stage23 -Force | Out-Null
-          Invoke-WebRequest 'https://www6.serviciosmin.gob.es/aplicaciones/calener/setupCE3Xv2.3.exe' -OutFile "$stage23/setup.exe"
+          Invoke-WebRequest -TimeoutSec 180 'https://www6.serviciosmin.gob.es/aplicaciones/calener/setupCE3Xv2.3.exe' -OutFile "$stage23/setup.exe"
           if ((Get-FileHash "$stage23/setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant() -ne '5cb86c17900bb383577bb31f78251f22d722db2f185d16d69b4decfef57ae82c') { throw 'Ha cambiado el instalador oficial 2.3.' }
           Invoke-WebRequest 'https://raw.githubusercontent.com/jrathlev/InnoUnpacker-Windows-GUI/418937d9913c67b9abbe93a2e9e725a06f0f2be7/innounp-2/bin/innounp-2.zip' -OutFile "$stage23/tool.zip"
           if ((Get-FileHash "$stage23/tool.zip" -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f8e45c9676bebc7d7570108ab572673b541fcf7a7d3d24a04319ac6b5315b4e8') { throw 'SHA incorrecto del extractor.' }
@@ -51,8 +53,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la sonda.' }
           New-Item -ItemType Directory -Path _validacion -Force | Out-Null
           $env:CE3X_PROBE_OUTPUT = "$pwd/_validacion/paneles_nativos_23.json"
-          & "$stage23/probe.exe" $nativeApp.DirectoryName "$pwd/scripts/inspeccionar_paneles_23.py"
-          if ($LASTEXITCODE -ne 0) { throw 'No se pudo ejecutar la sonda nativa.' }
+          $probe = Start-Process -FilePath "$stage23/probe.exe" -ArgumentList @($nativeApp.DirectoryName, "$pwd/scripts/inspeccionar_paneles_23.py") -PassThru -RedirectStandardOutput "$pwd/_validacion/probe_stdout.txt" -RedirectStandardError "$pwd/_validacion/probe_stderr.txt"
+          if (-not $probe.WaitForExit(60000)) { Stop-Process -Id $probe.Id; throw 'La sonda nativa ha superado el tiempo limite.' }
+          Get-Content _validacion/probe_stdout.txt
+          Get-Content _validacion/probe_stderr.txt
+          if ($probe.ExitCode -ne 0) { throw 'No se pudo ejecutar la sonda nativa.' }
       - name: Preparar Python portatil
         shell: pwsh
         run: |
@@ -86,6 +91,21 @@ jobs:
             if ($choice -eq 'cancel' -and (Test-Path $output)) { throw 'Cancelar ha generado una salida.' }
             if ($choice -ne 'cancel' -and -not (Test-Path $output)) { throw 'No se ha generado la salida elegida.' }
           }
+      - name: Probar aviso y omision de protecciones nuevas
+        shell: pwsh
+        run: |
+          python -c "import sys; from pathlib import Path; sys.path.insert(0,'fuentes'); import test_converter as t; x=t.ConverterTests(); x.setUp(); x.blind_fixture(); Path('_validacion/proteccion.cex').write_bytes(t.c.encoded(x.src)); x.tearDown()"
+          foreach ($choice in @('omit','cancel')) {
+            $source = "$pwd/_validacion/proteccion_$choice.cex"
+            Copy-Item _validacion/proteccion.cex $source
+            $marker = "$pwd/_validacion/proteccion_$choice.txt"
+            $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--smoke-decision', $source, $choice, $marker) -PassThru -Wait
+            if ($process.ExitCode -ne 0 -or (Get-Content $marker -Raw).Trim() -ne 'OK') { throw "Fallo de proteccion: $choice" }
+            $output = "$pwd/_validacion/proteccion_${choice}_CE3X2.3.cex"
+            if ($choice -eq 'cancel' -and (Test-Path $output)) { throw 'Cancelar ha generado una salida.' }
+          }
+          python -c "import sys; sys.path.insert(0,'app'); import converter as c; b=c.read_cex('_validacion/proteccion_omit_CE3X2.3.cex'); s=b[3][1][0].state; assert s['correctorFSVerano']==1.0 and not s['tieneProteccionSolar']; assert len(s['elementosProteccionSolar'])==25"
+          if ($LASTEXITCODE -ne 0) { throw 'Factores solares incoherentes en destino.' }
       - name: Revisar ejemplos oficiales de CE3X 3.2
         shell: pwsh
         run: |
@@ -136,3 +156,25 @@ jobs:
             _release/*
             _validacion/**
           retention-days: 14
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Conversor_CE3X_1_5_1_artefactos
+          path: artifact
+      - name: Publicar 1.5.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v1.5.1 >/dev/null 2>&1; then
+            echo 'La version ya existe, no se modifica.'
+          else
+            gh release create v1.5.1 artifact/_release/Conversor_CE3X_Windows_1_5_1.zip artifact/_release/SHA256SUMS.txt --target "$GITHUB_SHA" --title '1.5.1 - Particiones y protecciones solares' --notes-file docs/RELEASE_1_5_1.md
+          fi
