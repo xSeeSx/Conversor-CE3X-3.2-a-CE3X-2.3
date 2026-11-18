@@ -162,12 +162,101 @@ class ConverterTests(unittest.TestCase):
         src=copy.deepcopy(self.src);src[0]='CEXv2.3 Residencial';self.assertFailure('E_SOURCE_VERSION',src)
     def test_active_new_system_group(self):
         src=copy.deepcopy(self.src);src[4][13]=[['nuevo']];self.assertFailure('E_NEW_SYSTEM',src)
+    def blind_fixture(self):
+        state=self.src[3][1][0].state
+        state.update(elementosProteccionSolar=['']*6+[['',0,0],['',0,0],'',False,False,'',False,False,'','','',False,False,False,False,False,False,False,['',''],True,'Manuales','Blanco'],
+                     tieneProteccionSolar=True,correctorFSCTE=.19575,correctorFSInvierno=1.0,correctorFSVerano=.19575)
+    def test_new_window_protection_requires_explicit_decision(self):
+        self.blind_fixture();code,run=self.run_convert();self.assertEqual(code,2);self.assertFalse(run.output.exists())
+        self.assertEqual(run.manifest['pending_solar']['id'],'window-protection:building')
+        self.assertIsNone(run.manifest['pending_solar']['candidate'])
+    def test_omit_new_window_protection_resets_only_solar_properties(self):
+        self.blind_fixture();windows=self.src[3][1];self.partition_fixture();self.src[3][1]=windows
+        self.src[3][1][0].state['cerramientoAsociado']=self.src[3][0][0][0]
+        self.source_path.write_bytes(c.encoded(self.src));before=self.source_path.read_bytes()
+        code,run=c.convert(self.source_path,c.ROOT/'plantilla_23.cex',solar_choices={'window-protection:building':'omit'})
+        self.assertEqual(code,0,run.summary);dst=c.read_cex(run.output);state=dst[3][1][0].state
+        self.assertEqual(len(state['elementosProteccionSolar']),25);self.assertFalse(state['tieneProteccionSolar'])
+        for key in ('correctorFSCTE','correctorFSInvierno','correctorFSVerano'):self.assertEqual(state[key],1.0)
+        self.assertEqual(c.json_value(dst[3][0]),c.json_value(self.src[3][0]));self.assertEqual(dst[3][2],self.src[3][2])
+        self.assertEqual(self.source_path.read_bytes(),before)
+        self.assertTrue(run.manifest['results_require_recalculation'])
+    def test_new_window_protection_combined_shading_stays_blocked(self):
+        self.blind_fixture();self.src[3][1][0].state['elementosProteccionSolar'][0]='1.5';self.assertFailure('E_ACTIVE_SOLAR')
+    def test_window_protection_with_improvements_stays_blocked(self):
+        self.blind_fixture();self.src[5]=[self.fixture_measure()];self.assertFailure('E_ACTIVE_SOLAR')
+    def test_window_protection_cannot_be_adapted_silently(self):
+        self.blind_fixture();self.source_path.write_bytes(c.encoded(self.src))
+        code,run=c.convert(self.source_path,c.ROOT/'plantilla_23.cex',solar_choices={'window-protection:building':'adapt'})
+        self.assertEqual(code,1);self.assertEqual(run.manifest['error_code'],'E_SOLAR_SCOPE');self.assertFalse(run.output.exists())
+    def test_window_protection_cancel_does_not_write(self):
+        self.blind_fixture();self.source_path.write_bytes(c.encoded(self.src));inp=io.StringIO(json.dumps({'command':'convert','source':str(self.source_path)})+'\n'+json.dumps({'command':'decision','id':'window-protection:building','choice':'cancel'})+'\n');out=io.StringIO()
+        c.serve(inp,out);self.assertIn('DECISION_OMIT',out.getvalue());self.assertIn('CANCELADO',out.getvalue());self.assertFalse(c.output_path(self.source_path).exists())
     def test_active_new_solar_option(self):
         src=copy.deepcopy(self.src);src[3][1][0].state['elementosProteccionSolar'][-1]='activo';self.assertFailure('E_ACTIVE_SOLAR',src)
     def test_new_general_field(self):
         src=copy.deepcopy(self.src);src[2][25]={'nuevo':'objeto'};self.assertFailure('E_NEW_GENERAL',src)
     def test_source_schema(self):
         src=copy.deepcopy(self.src);src[1].append('extra');self.assertFailure('E_SOURCE_SCHEMA',src)
+    def partition_fixture(self):
+        rows=json.loads((Path(__file__).parent/'fixtures/particiones_oficiales_23.json').read_text(encoding='utf-8'))['rows']
+        self.src[3]=[copy.deepcopy(rows),[],[],[]]
+        return rows
+    def test_official_native_23_vertical_and_lower_partitions_preserved(self):
+        rows=self.partition_fixture();code,run=self.run_convert();self.assertEqual(code,0,run.summary)
+        dst=c.read_cex(run.output)
+        self.assertEqual(c.json_value(dst[3][0]),rows)
+        self.assertEqual(len(dst[3][0]),6)
+        self.assertEqual({r[-1] for r in dst[3][0]},{'vertical','horizontal inferior'})
+    def test_partition_known_and_estimated_payloads_preserved(self):
+        self.src[3][1]=[]
+        cases=[('vertical',['Poco Ventilado','50',True,'Ambos','Por defecto']),
+               ('horizontal inferior',['Cámara Sanitaria','50',False,'El cerramiento','Por defecto'])]
+        for contact,details in cases:
+            with self.subTest(contact=contact):
+                row=['Particion '+contact,'Partición Interior','23.45',0.55,60.0,'','','Sin patrón','Estimadas',details,'9.38','2.5','','Edificio Objeto',contact]
+                self.src[3][0]=[row];code,run=self.run_convert();self.assertEqual(code,0,run.summary)
+                self.assertEqual(c.json_value(c.read_cex(run.output)[3][0]),[row]);run.output.unlink()
+    def test_partition_wrong_record_length_still_rejected(self):
+        self.partition_fixture();self.src[3][0][0].insert(5,'campo desconocido');self.assertFailure('E_ENVELOPE_ROW',self.src)
+    def test_unknown_partition_contact_still_rejected(self):
+        self.partition_fixture();self.src[3][0][0][-1]='inclinado desconocido';self.assertFailure('E_ENVELOPE_UNKNOWN',self.src)
+    def test_all_ten_envelope_types_preserved(self):
+        fixtures=[
+            ['Fachada aire','Fachada','20',1.4,200,'Norte','','Sin patrón','Por defecto',[],'8','2.5','1','Edificio Objeto','aire'],
+            ['Medianeria','Fachada','20',0,200,'','','Sin patrón','8','2.5','1','Edificio Objeto','edificio'],
+            ['Muro enterrado','Fachada','20',1.4,200,'1','','Sin patrón','Conocidas',['1.4'],'8','2.5','1','Edificio Objeto','terreno'],
+            ['Cubierta aire','Cubierta','20',1.0,344,'Techo','','Sin patrón','Por defecto',['Cubierta plana'],'5','4','1','Edificio Objeto','aire'],
+            ['Cubierta enterrada','Cubierta','20',1.0,344,'0.5','','Sin patrón','Conocidas',['1.0'],'5','4','1','Edificio Objeto','terreno'],
+            ['Suelo aire','Suelo','20',1.0,344,'Suelo','','Sin patrón','Conocidas',['1.0'],'5','4','1','Edificio Objeto','aire'],
+            ['Suelo terreno','Suelo','20',1.0,750,'Suelo','','Sin patrón','Por defecto',True,'',[],'5','4','1','Edificio Objeto','terreno'],
+        ]
+        rows=json.loads((Path(__file__).parent/'fixtures/particiones_oficiales_23.json').read_text(encoding='utf-8'))['rows']
+        fixtures += [copy.deepcopy(next(r for r in rows if r[-1]==contact)) for contact in ('vertical','horizontal inferior')]
+        fixtures += [copy.deepcopy(self.src[3][0][0])]
+        self.src[3]=[fixtures,[],[],[]]
+        code,run=self.run_convert();self.assertEqual(code,0,run.summary)
+        dst=c.read_cex(run.output);self.assertEqual(c.json_value(dst[3][0]),fixtures)
+        self.assertEqual(len({(r[1],r[-1]) for r in dst[3][0]}),10)
+        self.assertEqual(len(self.profile['envelope_lengths']),10)
+    def test_native_nested_zones_preserved(self):
+        zone=lambda name,parent,area:c.CexObject(c.GlobalRef('ventanaSubgrupo','claseZona'),
+             {'nombre':name,'raiz':parent,'tipo':'Subgrupo','superficie':area})
+        self.src[3][3]=[zone('Planta baja','Edificio Objeto','80'),zone('Vivienda','Planta baja','46.10')]
+        self.src[3][0][0][-2]='Vivienda';self.src[3][1][0].state['subgrupo']='Vivienda'
+        code,run=self.run_convert();self.assertEqual(code,0,run.summary)
+        dst=c.read_cex(run.output)
+        self.assertEqual(c.typed_value(dst[3][3]),c.typed_value(self.src[3][3]))
+        self.assertEqual(dst[3][0][0][-2],'Vivienda');self.assertEqual(dst[3][1][0].state['subgrupo'],'Vivienda')
+    def test_zones_inside_improvement_graph_preserved(self):
+        zone=c.CexObject(c.GlobalRef('ventanaSubgrupo','claseZona'),
+            {'nombre':'Zona propia','raiz':'Edificio Objeto','tipo':'Subgrupo','superficie':'45'})
+        state={key:[] for key in c.mm_schema()['datosEdificio.datosEdificio']}
+        state.update(datosGenerales=copy.deepcopy(self.src[2]),datosInstalaciones=[[] for _ in range(14)],subgrupos=[zone])
+        measure=self.fixture_measure();measure.state['datosEdificioOriginal']=c.CexObject(c.GlobalRef('datosEdificio','datosEdificio'),state);self.src[5]=[measure]
+        code,run=self.run_convert();self.assertEqual(code,0,run.summary)
+        out=c.read_cex(run.output)[5][0].state['datosEdificioOriginal'].state['subgrupos'][0]
+        self.assertEqual(c.typed_value(out),c.typed_value(zone))
     def test_unknown_envelope(self):
         src=copy.deepcopy(self.src);src[3][0][0][-1]='nuevo contacto';self.assertFailure('E_ENVELOPE_UNKNOWN',src)
     def test_unknown_system_shape(self):

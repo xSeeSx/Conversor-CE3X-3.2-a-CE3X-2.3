@@ -31,6 +31,8 @@ def package(root, output_directory):
         '3. Pulsa Convertir. Se guarda nombre_CE3X2.3.cex junto al original.\n'
         '4. Revisa y recalcula el resultado y las mejoras en CE3X 2.3.\n\n'
         'Si hay solar mensual, decide Adaptar, Omitir lo indicado o Cancelar.\n'
+        'Si hay protecciones solares nuevas, lee el aviso: Omitir conserva las\n'
+        'ventanas y retira la proteccion nueva. Puede cambiar la refrigeracion.\n'
         'Adaptar solo se ofrece para la configuracion ensayada. En una mejora,\n'
         'Omitir retira el conjunto completo, segun advierte el dialogo.\n\n'
         'No se sobrescribe el original. Si la salida ya existe, se pide confirmacion.\n'

@@ -1,5 +1,5 @@
 {
-  "profile_version": "1.3.0",
+  "profile_version": "1.5.1",
   "source_header": "CE3Xv3.2 Residencial",
   "target_header": "CEXv2.3 Residencial",
   "block_count": 15,
@@ -17,6 +17,10 @@
     "Cubierta|aire": 15,
     "Suelo|aire": 15,
     "Suelo|terreno": 17,
-    "Partición Interior|horizontal superior": 15
+    "Partición Interior|horizontal superior": 15,
+    "Partición Interior|vertical": 15,
+    "Partición Interior|horizontal inferior": 15,
+    "Fachada|terreno": 15,
+    "Cubierta|terreno": 15
   }
 }

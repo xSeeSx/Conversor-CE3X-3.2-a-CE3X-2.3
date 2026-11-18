@@ -1,0 +1,119 @@
+{
+  "provenance": "CE3X 2.3, ejemplo oficial 5 Gran terciario.cex, suministrado con el instalador oficial. Solo se incluyen particiones, sin datos del diagnostico privado.",
+  "rows": [
+    [
+      "Partición vertical sala calderas",
+      "Partición Interior",
+      "44.14",
+      0.43,
+      60.0,
+      "",
+      "",
+      "Sin patrón",
+      "Conocidas",
+      [
+        "0.43"
+      ],
+      "",
+      "",
+      "",
+      "Zona 2",
+      "vertical"
+    ],
+    [
+      "Partición cámara sanitaria",
+      "Partición Interior",
+      "231.28",
+      1.26,
+      333.0,
+      "Cámara Sanitaria",
+      "Conocidas",
+      "Sin patrón",
+      "Conocidas",
+      [
+        "1.26"
+      ],
+      "",
+      "",
+      "",
+      "Zona 1",
+      "horizontal inferior"
+    ],
+    [
+      "Partición vertical Z3 cubierta",
+      "Partición Interior",
+      "112.6",
+      2.42,
+      60.0,
+      "",
+      "",
+      "Sin patrón",
+      "Conocidas",
+      [
+        "2.42"
+      ],
+      "",
+      "",
+      "",
+      "Zona 3",
+      "vertical"
+    ],
+    [
+      "Partición vertical Z3 sala calderas",
+      "Partición Interior",
+      "29.5",
+      2.07,
+      60.0,
+      "",
+      "",
+      "Sin patrón",
+      "Conocidas",
+      [
+        "2.07"
+      ],
+      "",
+      "",
+      "",
+      "Zona 3",
+      "vertical"
+    ],
+    [
+      "Partición inferior Z3",
+      "Partición Interior",
+      "2489.78",
+      0.71,
+      333.0,
+      "Cámara Sanitaria",
+      "Conocidas",
+      "Sin patrón",
+      "Conocidas",
+      [
+        "0.71"
+      ],
+      "",
+      "",
+      "",
+      "Zona 3",
+      "horizontal inferior"
+    ],
+    [
+      "Partición inferior Z2",
+      "Partición Interior",
+      "705.6",
+      1.13,
+      333.0,
+      "Cámara Sanitaria",
+      "Conocidas",
+      "Sin patrón",
+      "Conocidas",
+      [
+        "1.13"
+      ],
+      "",
+      "",
+      "",
+      "Zona 2",
+      "horizontal inferior"
+    ]
+  ]
+}
