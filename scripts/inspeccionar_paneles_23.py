@@ -22,13 +22,34 @@ class Field(object):
 class Dummy(object):
  def comprobarDatos(self):return ''
  def __getattr__(self,n):return Field(n)
+# Solo se simulan controles y clases graficas; cogerDatos es el del modulo nativo.
+# El ejecutable de pruebas no tiene el contexto de activacion de wx del EXE original.
+import types
+class GraphicBase(object):
+ def __init__(self,*args,**kwargs):pass
+class GraphicModule(types.ModuleType):
+ def __getattr__(self,name):
+  if name=='__path__':return []
+  if name in ('PlatformInfo','VERSION'):return ()
+  if name=='Platform':return '__WXMSW__'
+  if name.isupper():return 0
+  if name=='NewId':return lambda *a,**k:1
+  return GraphicBase
+original_import=__builtin__.__import__
+def isolated_import(name,globals=None,locals=None,fromlist=None,level=-1):
+ if name=='wx' or name.startswith('wx.') or name=='MiWX' or name.startswith('MiWX.'):
+  if name not in sys.modules:sys.modules[name]=GraphicModule(name)
+  return sys.modules[name]
+ return original_import(name,globals,locals,fromlist,level)
+__builtin__.__import__=isolated_import
 names=['panelCubiertaConAire','panelCubiertaConTerreno','panelFachadaConAire','panelFachadaConEdificio','panelFachadaConTerreno','panelSueloConAire','panelSueloConTerreno','panelParticionVertical','panelParticionHorizontalSuperior','panelParticionHorizontalInferior']
 results=[]
 for name in names:
  try:
   module=__import__('Envolvente.'+name,fromlist=['Panel1'])
   obj=Dummy();obj.tipo='Cubierta' if 'Cubierta' in name else 'Fachada' if 'Fachada' in name else 'Suelo' if 'Suelo' in name else u'Partici\xf3n Interior'
-  result=module.Panel1.cogerDatos.im_func(obj)
+  method=module.Panel1.cogerDatos
+  result=getattr(method,'im_func',method)(obj)
   results.append({'module':name,'length':len(result),'row':result})
  except Exception:
   results.append({'module':name,'error':traceback.format_exc()})
