@@ -248,6 +248,15 @@ class ConverterTests(unittest.TestCase):
         dst=c.read_cex(run.output)
         self.assertEqual(c.typed_value(dst[3][3]),c.typed_value(self.src[3][3]))
         self.assertEqual(dst[3][0][0][-2],'Vivienda');self.assertEqual(dst[3][1][0].state['subgrupo'],'Vivienda')
+    def test_zones_inside_improvement_graph_preserved(self):
+        zone=c.CexObject(c.GlobalRef('ventanaSubgrupo','claseZona'),
+            {'nombre':'Zona propia','raiz':'Edificio Objeto','tipo':'Subgrupo','superficie':'45'})
+        state={key:[] for key in c.mm_schema()['datosEdificio.datosEdificio']}
+        state.update(datosGenerales=copy.deepcopy(self.src[2]),datosInstalaciones=[[] for _ in range(14)],subgrupos=[zone])
+        measure=self.fixture_measure();measure.state['datosEdificioOriginal']=c.CexObject(c.GlobalRef('datosEdificio','datosEdificio'),state);self.src[5]=[measure]
+        code,run=self.run_convert();self.assertEqual(code,0,run.summary)
+        out=c.read_cex(run.output)[5][0].state['datosEdificioOriginal'].state['subgrupos'][0]
+        self.assertEqual(c.typed_value(out),c.typed_value(zone))
     def test_unknown_envelope(self):
         src=copy.deepcopy(self.src);src[3][0][0][-1]='nuevo contacto';self.assertFailure('E_ENVELOPE_UNKNOWN',src)
     def test_unknown_system_shape(self):

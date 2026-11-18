@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 # Ejecutado SOLO con python27.dll oficial por el lanzador de pruebas de CI.
-import sys,os,json,traceback
+import sys
+import os,json,traceback
+sys.frozen="console_exe"
+sys.executable=os.path.join(os.getcwd(),"cexv2.3.exe")
 sys.path.insert(0,os.getcwd())
 import __builtin__
 __builtin__._=lambda s:s
@@ -30,5 +33,5 @@ for name in names:
  except Exception:
   results.append({'module':name,'error':traceback.format_exc()})
 output=os.environ['CE3X_PROBE_OUTPUT']
-with open(output,'wb') as f:f.write(json.dumps(results,ensure_ascii=True,indent=2,default=lambda o:unicode(o)).encode('ascii'))
-print(json.dumps(results,ensure_ascii=True,indent=2,default=lambda o:unicode(o)))
+with open(output,'wb') as f:f.write(json.dumps(results,encoding="latin1",ensure_ascii=True,indent=2,default=lambda o:unicode(o)).encode('ascii'))
+print(json.dumps(results,encoding="latin1",ensure_ascii=True,indent=2,default=lambda o:unicode(o)))

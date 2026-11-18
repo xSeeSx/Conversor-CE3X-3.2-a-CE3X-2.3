@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.4.1",
+  "schema_version": "1.5.1",
   "reference_sha256": "80491aac9bdc95fd48ed8f64e622fa0569f71e7b962020607f657dbc0b22f701",
   "classes": {
     "MedidasDeMejora.objetoGrupoMejoras.grupoMedidasMejora": [
@@ -1121,6 +1121,12 @@
       "nombre",
       "peso",
       "transmitancia"
+    ],
+    "ventanaSubgrupo.claseZona": [
+      "nombre",
+      "raiz",
+      "tipo",
+      "superficie"
     ]
   },
   "required_fields": {
@@ -2150,6 +2156,12 @@
       "nombre",
       "peso",
       "transmitancia"
+    ],
+    "ventanaSubgrupo.claseZona": [
+      "nombre",
+      "raiz",
+      "tipo",
+      "superficie"
     ]
   },
   "official_reference_sources": [
@@ -2162,6 +2174,13 @@
       "name": "2 Vivienda dentro de bloque.cex",
       "sha256": "1ea9cac49eab310157f67e3314b636a11e6ae7595bb6d23ccd9273067d4a5815",
       "header": "CEXv2.3 Residencial"
+    }
+  ],
+  "additional_references": [
+    {
+      "source": "CE3X 2.3, ejemplo oficial 5 Gran terciario.cex",
+      "installer_sha256": "5cb86c17900bb383577bb31f78251f22d722db2f185d16d69b4decfef57ae82c",
+      "class": "ventanaSubgrupo.claseZona"
     }
   ]
 }

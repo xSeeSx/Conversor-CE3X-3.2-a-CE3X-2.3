@@ -34,6 +34,9 @@ def inspect_examples(directory, report_path):
                           shadow_patterns=len(blocks[9]), shadow_names=c.json_value(blocks[10]),
                           general_surface=c.json_value(blocks[2][6]), general_extra_fields=c.json_value(blocks[2][21:]),
                           improvement_count=len(blocks[5]))
+            record['envelope_types']=sorted({str(r[1])+'|'+str(r[-1]) for r in blocks[3][0]})
+            record['zones']=[{'class':z.cls.module+'.'+z.cls.name,'fields':sorted(str(k) for k in z.state)}
+                             for z in blocks[3][3] if isinstance(z,c.CexObject)]
             if str(header) != 'CE3Xv3.2 Residencial':
                 record['conversion'] = 'not_32_residential'
                 continue
