@@ -66,6 +66,8 @@ jobs:
           if (-not $probe.WaitForExit(60000)) { Stop-Process -Id $probe.Id; throw 'La sonda nativa ha superado el tiempo limite.' }
           Get-Content _validacion/probe_stdout.txt
           Get-Content _validacion/probe_stderr.txt
+          python -c "import json; from pathlib import Path; result=json.loads(Path('_validacion/paneles_nativos_23.json').read_text()); expected=json.loads(Path('app/profile.json').read_text(encoding='utf-8'))['envelope_lengths']; assert len(result)==10 and all('row' in x for x in result), result; actual={x['row'][1]+'|'+x['row'][-1]:x['length'] for x in result}; assert actual==expected, (actual,expected)"
+          if ($LASTEXITCODE -ne 0) { throw 'El catalogo no coincide con las estructuras nativas 2.3.' }
           if ($probe.ExitCode -ne 0) { throw 'No se pudo ejecutar la sonda nativa.' }
       - uses: actions/cache/save@v4
         if: always() && steps.native.outputs.extracted == 'true' && steps.nativecache.outputs.cache-hit != 'true'
@@ -187,6 +189,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [ "$head" != "$GITHUB_SHA" ]; then echo 'Compilacion anterior al ultimo cambio, no publicar.'; exit 0; fi
           if gh release view v1.5.1 >/dev/null 2>&1; then
             echo 'La version ya existe, no se modifica.'
           else

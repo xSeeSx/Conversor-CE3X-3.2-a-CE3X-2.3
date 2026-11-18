@@ -1,0 +1,16 @@
+{
+  "provenance": "cogerDatos de los diez paneles originales CE3X 2.3, ejecutado en Windows con controles graficos simulados. Comprueba estructura, no validez fisica ni apertura completa en la aplicacion.",
+  "installer_sha256": "5cb86c17900bb383577bb31f78251f22d722db2f185d16d69b4decfef57ae82c",
+  "layouts": {
+    "Cubierta|aire": 15,
+    "Cubierta|terreno": 16,
+    "Fachada|aire": 15,
+    "Fachada|edificio": 13,
+    "Fachada|terreno": 15,
+    "Suelo|aire": 15,
+    "Suelo|terreno": 17,
+    "Partición Interior|vertical": 15,
+    "Partición Interior|horizontal superior": 15,
+    "Partición Interior|horizontal inferior": 15
+  }
+}

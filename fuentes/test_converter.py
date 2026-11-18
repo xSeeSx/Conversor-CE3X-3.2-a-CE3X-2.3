@@ -221,13 +221,17 @@ class ConverterTests(unittest.TestCase):
         self.partition_fixture();self.src[3][0][0].insert(5,'campo desconocido');self.assertFailure('E_ENVELOPE_ROW',self.src)
     def test_unknown_partition_contact_still_rejected(self):
         self.partition_fixture();self.src[3][0][0][-1]='inclinado desconocido';self.assertFailure('E_ENVELOPE_UNKNOWN',self.src)
+    def test_catalog_matches_all_native_23_panel_layouts(self):
+        evidence=json.loads((Path(__file__).parent/'fixtures/envolvente_nativa_23.json').read_text(encoding='utf-8'))
+        self.assertEqual(self.profile['envelope_lengths'],evidence['layouts'])
+        self.assertEqual(self.profile['envelope_lengths']['Cubierta|terreno'],16)
     def test_all_ten_envelope_types_preserved(self):
         fixtures=[
             ['Fachada aire','Fachada','20',1.4,200,'Norte','','Sin patrón','Por defecto',[],'8','2.5','1','Edificio Objeto','aire'],
             ['Medianeria','Fachada','20',0,200,'','','Sin patrón','8','2.5','1','Edificio Objeto','edificio'],
             ['Muro enterrado','Fachada','20',1.4,200,'1','','Sin patrón','Conocidas',['1.4'],'8','2.5','1','Edificio Objeto','terreno'],
             ['Cubierta aire','Cubierta','20',1.0,344,'Techo','','Sin patrón','Por defecto',['Cubierta plana'],'5','4','1','Edificio Objeto','aire'],
-            ['Cubierta enterrada','Cubierta','20',1.0,344,'0.5','','Sin patrón','Conocidas',['1.0'],'5','4','1','Edificio Objeto','terreno'],
+            ['Cubierta enterrada','Cubierta','20',1.0,344,'Techo','','Sin patrón','Conocidas',['1.0'],'5','4','1','0.5','Edificio Objeto','terreno'],
             ['Suelo aire','Suelo','20',1.0,344,'Suelo','','Sin patrón','Conocidas',['1.0'],'5','4','1','Edificio Objeto','aire'],
             ['Suelo terreno','Suelo','20',1.0,750,'Suelo','','Sin patrón','Por defecto',True,'',[],'5','4','1','Edificio Objeto','terreno'],
         ]
