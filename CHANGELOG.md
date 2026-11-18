@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## 1.5.1 - 2026-11-18
+
+- Corregido el rechazo de particiones interiores verticales y horizontales inferiores compatibles con CE3X 2.3.
+- Contrastada su estructura de 15 campos con las particiones del ejemplo oficial nativo 2.3. Los datos se conservan sin transformar sus valores.
+- Añadidas pruebas de conservación y rechazo de estructuras desconocidas. No cambia el ámbito residencial del conversor.
+
+
 Las versiones publicadas y sus descargas están en [Releases](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases).
 
 ## 1.5.0

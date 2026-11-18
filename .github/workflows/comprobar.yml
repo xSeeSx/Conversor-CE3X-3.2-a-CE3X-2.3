@@ -34,6 +34,25 @@ jobs:
       - name: Compilar interfaz nativa
         shell: pwsh
         run: ./fuentes/compilar_windows.ps1
+      - name: Inspeccionar paneles nativos CE3X 2.3
+        shell: pwsh
+        run: |
+          $stage23 = Join-Path $env:RUNNER_TEMP 'ce3x23'
+          New-Item -ItemType Directory -Path $stage23 -Force | Out-Null
+          Invoke-WebRequest 'https://www6.serviciosmin.gob.es/aplicaciones/calener/setupCE3Xv2.3.exe' -OutFile "$stage23/setup.exe"
+          if ((Get-FileHash "$stage23/setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant() -ne '5cb86c17900bb383577bb31f78251f22d722db2f185d16d69b4decfef57ae82c') { throw 'Ha cambiado el instalador oficial 2.3.' }
+          Invoke-WebRequest 'https://raw.githubusercontent.com/jrathlev/InnoUnpacker-Windows-GUI/418937d9913c67b9abbe93a2e9e725a06f0f2be7/innounp-2/bin/innounp-2.zip' -OutFile "$stage23/tool.zip"
+          if ((Get-FileHash "$stage23/tool.zip" -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f8e45c9676bebc7d7570108ab572673b541fcf7a7d3d24a04319ac6b5315b4e8') { throw 'SHA incorrecto del extractor.' }
+          Expand-Archive "$stage23/tool.zip" "$stage23/tool"
+          & "$stage23/tool/innounp.exe" -x -m "-d$stage23/native" "$stage23/setup.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo extraer CE3X 2.3.' }
+          $nativeApp = Get-ChildItem "$stage23/native" -Recurse -Filter python27.dll | Select-Object -First 1
+          zig cc -target x86-windows-gnu -O2 fuentes/probe_python27.c -o "$stage23/probe.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la sonda.' }
+          New-Item -ItemType Directory -Path _validacion -Force | Out-Null
+          $env:CE3X_PROBE_OUTPUT = "$pwd/_validacion/paneles_nativos_23.json"
+          & "$stage23/probe.exe" $nativeApp.DirectoryName "$pwd/scripts/inspeccionar_paneles_23.py"
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo ejecutar la sonda nativa.' }
       - name: Preparar Python portatil
         shell: pwsh
         run: |
@@ -109,9 +128,10 @@ jobs:
             Remove-Item $bitmapPath
           }
       - name: Conservar paquete y vista previa
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Conversor_CE3X_1_5_0_artefactos
+          name: Conversor_CE3X_1_5_1_artefactos
           path: |
             _release/*
             _validacion/**

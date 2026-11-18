@@ -4,11 +4,11 @@ Conversor experimental de archivos `.cex` residenciales de CE3X 3.2 a CE3X 2.3 p
 
 ## Descargar
 
-[**Descargar para Windows, versión 1.5.0**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/download/v1.5.0/Conversor_CE3X_Windows_1_5_0.zip)
+[**Descargar para Windows, versión 1.5.1**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/download/v1.5.1/Conversor_CE3X_Windows_1_5_1.zip)
 
 [Releases y notas de cada versión](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases) · [Historial de cambios](CHANGELOG.md)
 
-El ZIP incluye el ejecutable y Python. No necesitas instalar Python ni otros paquetes. En Releases, descarga `Conversor_CE3X_Windows_1_5_0.zip`; los archivos llamados **Source code** contienen los fuentes.
+El ZIP incluye el ejecutable y Python. No necesitas instalar Python ni otros paquetes. En Releases, descarga `Conversor_CE3X_Windows_1_5_1.zip`; los archivos llamados **Source code** contienen los fuentes.
 
 ## Cómo usar la versión publicada
 

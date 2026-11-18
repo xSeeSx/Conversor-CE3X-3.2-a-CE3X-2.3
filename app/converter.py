@@ -23,7 +23,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass, field
 
-VERSION = '1.5.0'
+VERSION = '1.5.1'
 ROOT = Path(__file__).resolve().parent
 MAX_BYTES = 64 * 1024 * 1024
 BLOCK_NAMES = ['version', 'administrativos', 'generales', 'envolvente', 'instalaciones',
