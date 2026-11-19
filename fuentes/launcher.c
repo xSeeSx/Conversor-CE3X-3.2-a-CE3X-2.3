@@ -173,7 +173,7 @@ static const WCHAR *decisionSmokePreviews[2];
 static int savePreview(HWND target, const WCHAR *path);
 static int px(int value);
 
-enum { IDC_DECISION_DETAILS = 503, IDC_DECISION_INVENTORY = 504 };
+enum { IDC_DECISION_DETAILS = 503, IDC_DECISION_INVENTORY = 504, IDC_DECISION_SUMMARY = 505 };
 
 static void layoutExperimentalDecision(HWND dialog, BOOL expanded) {
     HWND inventory = GetDlgItem(dialog, IDC_DECISION_INVENTORY);
@@ -181,7 +181,7 @@ static void layoutExperimentalDecision(HWND dialog, BOOL expanded) {
         expanded ? L"Ocultar detalles" : L"Ver detalles");
     ShowWindow(inventory, expanded ? SW_SHOWNA : SW_HIDE);
 
-    int row = expanded ? 345 : 158;
+    int row = expanded ? 369 : 182;
     MoveWindow(GetDlgItem(dialog, 501), px(20), px(row), px(195), px(36), TRUE);
     MoveWindow(GetDlgItem(dialog, 502), px(226), px(row), px(235), px(36), TRUE);
     MoveWindow(GetDlgItem(dialog, IDCANCEL), px(472), px(row), px(188), px(36), TRUE);
@@ -200,6 +200,10 @@ static void layoutExperimentalDecision(HWND dialog, BOOL expanded) {
 }
 
 static LRESULT CALLBACK DecisionProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_CTLCOLORSTATIC && GetDlgCtrlID((HWND)lp) == IDC_DECISION_SUMMARY) {
+        SetBkColor((HDC)wp, GetSysColor(COLOR_WINDOW));
+        return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+    }
     if (msg == WM_COMMAND && LOWORD(wp) == IDC_DECISION_DETAILS) {
         layoutExperimentalDecision(hwnd, !IsWindowVisible(GetDlgItem(hwnd, IDC_DECISION_INVENTORY)));
         return 0;
@@ -211,8 +215,20 @@ static LRESULT CALLBACK DecisionProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-static int verifyExperimentalDisclosure(HWND dialog, HWND body, HWND cancel) {
+static int verifyExperimentalDialog(HWND dialog, HWND body, HWND cancel) {
     if (IsWindowVisible(body) || GetFocus() != cancel) return 0;
+    HWND summary = GetDlgItem(dialog, IDC_DECISION_SUMMARY);
+    WCHAR text[512];
+    if (!GetWindowTextW(summary, text, ARRAYSIZE(text))) return 0;
+    RECT bounds;
+    GetClientRect(summary, &bounds);
+    int availableHeight = bounds.bottom;
+    HDC dc = GetDC(summary);
+    HGDIOBJ previousFont = SelectObject(dc, font);
+    int textHeight = DrawTextW(dc, text, -1, &bounds, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+    SelectObject(dc, previousFont);
+    ReleaseDC(summary, dc);
+    if (textHeight <= 0 || textHeight > availableHeight) return 0;
     for (int expanded = 0; expanded < 2; expanded++) {
         if (!!IsWindowVisible(body) != expanded) return 0;
         if (decisionSmokePreviews[expanded]) {
@@ -236,7 +252,7 @@ static int conversionDecision(const WCHAR *message, int canAdapt, int experiment
     if (!dialog) return IDCANCEL;
     HWND body = CreateWindowExW(experimental ? WS_EX_CLIENTEDGE : 0, L"EDIT", message,
         WS_CHILD | (experimental ? 0 : WS_VISIBLE) | WS_TABSTOP | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
-        experimental ? px(20) : 20, experimental ? px(152) : 18,
+        experimental ? px(20) : 20, experimental ? px(176) : 18,
         experimental ? px(640) : 650, experimental ? px(177) : 165, dialog,
         (HMENU)(INT_PTR)IDC_DECISION_INVENTORY, wc.hInstance, NULL);
     SendMessageW(body, WM_SETFONT, (WPARAM)font, TRUE);
@@ -255,12 +271,12 @@ static int conversionDecision(const WCHAR *message, int canAdapt, int experiment
         HWND summary = CreateWindowExW(0, L"STATIC",
             L"Algunos elementos de este certificado no están disponibles en CE3X 2.3. "
             L"El conversor puede adaptarlos de forma experimental con alternativas compatibles.\r\n\r\n"
-            L"Antes de utilizar el resultado, recalcula el archivo en CE3X 2.3 y compara ambos certificados "
+            L"Antes de usar el resultado, recalcula el archivo en CE3X 2.3 y compara ambos certificados "
             L"para comprobar si los resultados coinciden.",
             WS_CHILD | WS_VISIBLE | SS_NOPREFIX,
-            px(20), px(18), px(640), px(91), dialog, NULL, wc.hInstance, NULL);
+            px(20), px(18), px(640), px(115), dialog, (HMENU)(INT_PTR)IDC_DECISION_SUMMARY, wc.hInstance, NULL);
         HWND disclosure = CreateWindowExW(0, L"BUTTON", L"Ver detalles", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            px(20), px(111), px(160), px(31), dialog, (HMENU)(INT_PTR)IDC_DECISION_DETAILS, wc.hInstance, NULL);
+            px(20), px(135), px(160), px(31), dialog, (HMENU)(INT_PTR)IDC_DECISION_DETAILS, wc.hInstance, NULL);
         if (!summary || !disclosure) { DestroyWindow(dialog); return IDCANCEL; }
         SendMessageW(summary, WM_SETFONT, (WPARAM)font, TRUE);
         SendMessageW(disclosure, WM_SETFONT, (WPARAM)font, TRUE);
@@ -273,7 +289,7 @@ static int conversionDecision(const WCHAR *message, int canAdapt, int experiment
         SendMessageW(dialog,WM_COMMAND,IDCANCEL,0);
     }
     if (decisionSmokeChoice) {
-        if (experimental && !verifyExperimentalDisclosure(dialog, body, cancel)) {
+        if (experimental && !verifyExperimentalDialog(dialog, body, cancel)) {
             DestroyWindow(dialog); EnableWindow(window, TRUE); return IDCANCEL;
         }
         SendMessageW(dialog,WM_COMMAND,(decisionSmokeChoice==501 && !canAdapt) ? IDCANCEL : decisionSmokeChoice,0);
