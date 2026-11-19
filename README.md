@@ -42,11 +42,9 @@ La termosolar admite un equipo eléctrico de efecto Joule conocido al 100 %, sin
 
 ## ¿Está probado?
 
-La **v1.5.3** superó apertura, recálculo, guardado y exportación XML de **seis salidas** en CE3X 2.3, incluidas mejoras y omisiones. Es una herramienta **experimental**, no garantiza compatibilidad universal ni sustituye la revisión del técnico.
+La **v1.6.0** superó las pruebas automáticas y la integración Windows. Se han comprobado en CE3X 2.3 la apertura, el recálculo, el guardado y la exportación XML de casos residenciales, incluidos ACS solar, persianas y mejoras. El autoconsumo mensual también se contrastó entre ambos motores en los ensayos documentados. Las opciones **experimentales** requieren revisar los resultados y no garantizan equivalencia universal.
 
-Los ensayos adicionales de ACS D1 y D2 comparan ambos motores. La salida convertida de persiana se contrastó con la referencia nativa 2.3.
-
-[Ver pruebas y resultados](docs/INFORME_VALIDACION_FINAL.md) · [Historial de versiones](CHANGELOG.md)
+[Pruebas residenciales](docs/INFORME_VALIDACION_FINAL.md) · [Equivalencias y límites](docs/EQUIVALENCIAS_Y_LIMITES.md) · [Historial](CHANGELOG.md)
 
 ## Si falla
 
