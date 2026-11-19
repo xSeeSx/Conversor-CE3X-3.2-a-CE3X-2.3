@@ -57,4 +57,4 @@ La **v1.5.3** superó apertura, recálculo, guardado y exportación XML de **sei
 
 Pulsa **Guardar diagnóstico** y adjúntalo a una [incidencia en GitHub](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/issues), indicando qué ocurrió. **Revisa el ZIP antes de compartirlo**: puede contener datos del certificado.
 
-[Documentación de desarrollo](docs/DESARROLLO.md) · [Instrucciones para Codex](AGENTS.md)
+[Documentación de desarrollo](docs/DESARROLLO.md)
