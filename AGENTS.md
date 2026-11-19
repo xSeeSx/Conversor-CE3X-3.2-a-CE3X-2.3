@@ -8,6 +8,21 @@ Antes de investigar las equivalencias P0-P3, lee [docs/FORMULAS_EQUIVALENCIAS_PE
 
 **Estado: v1.5.4 publicada.** P0 (eliminar restricciones D2/100 m²/100 L/día) ya está implementada experimentalmente y contrastada con ensayos D1/D2; no repetirla ni presentarla como pendiente. **Siguiente trabajo: P1**, comenzando por generalizar las persianas manuales aisladas a **cualquier color** si sus factores calculados de invierno/verano son válidos, sin intentar conservar el nombre de color en el campo «Otros» de 2.3, que no lo admite. Mantener aviso del cambio de factor CTE y consentimiento experimental. Después, estudiar persianas automáticas/combinaciones y **generación eléctrica/fotovoltaica mensual**. Proseguir con P2 (ventilación, recuperación, mejoras combinadas) y P3 si hay evidencia suficiente. Leer [el plan actualizado](docs/PLAN_ADAPTACIONES_PENDIENTES.md) y [las fórmulas preparadas](docs/FORMULAS_EQUIVALENCIAS_PENDIENTES.md). **No cerrar la tarea tras documentar bloqueos**: para cada pendiente identificar si puede convertirse, elaborar un ensayo y hacer una implementación segura, o registrar el impedimento técnico verificable. Publicar solo tras pruebas.
 
+## Fuentes primero, pruebas proporcionales
+
+**Prioridad absoluta: no redescubrir con ensayos lo que ya está definido en documentación técnica oficial o en los propios módulos del programa.** Para cada adaptación:
+
+1. Consultar **primero** la documentación oficial de CE3X 2.3 y 3.2, manuales, tablas y métodos de cálculo existentes en el repositorio. Si ahí consta la ecuación o la regla, usarla directamente con sus unidades, dominio y condiciones.
+2. Solo si falta un detalle necesario, inspeccionar **localmente** el código, los módulos y los paneles nativos de ambas versiones, preferentemente por terminal y consultas específicas, sin volver a investigar lo ya resuelto.
+3. Implementar en Python una regla o función parametrizada con los datos del CEX. **No fijar valores del certificado de ejemplo**, ni crear una rama por color, zona o superficie si la misma fórmula sirve para todos.
+4. Añadir **pruebas automáticas ligeras** de fórmula, unidades, límites y estructura. No crear proyectos nativos ni ensayos gráficos para cada valor ni repetir una batería anterior sin cambio relevante.
+5. Ejecutar **la mínima validación nativa necesaria** cuando la documentación no garantice cómo interpreta 2.3 un campo, haya una transformación semántica no demostrada o pueda cambiar la calificación. Una fórmula documentada **no garantiza** por sí sola que el CEX convertido abra y recalculen sus datos como esperamos. Para reglas nuevas, hacer al menos una comprobación representativa de apertura/recálculo si no existe evidencia previa reutilizable.
+6. Si no existe fórmula fiable, correspondencia de campos o comportamiento documentado, identificar **exactamente** la laguna. Buscar una prueba dirigida que resuelva solo esa incertidumbre, no montar experimentos generales sin hipótesis.
+7. Registrar un enlace a la fuente (y sección o función) junto al alcance de la conversión. Distinguir **derivado de documentación**, **comprobado nativamente** y **experimental**. No llamar "equivalente" a una aproximación por el mero hecho de tener una ecuación.
+8. **Continuar con la siguiente prioridad** tras resolver o acotar la actual. No consumir el bloque de uso en investigaciones repetidas, interfaces, documentación redundante ni ensayos de combinaciones que comparten algoritmo.
+
+**Criterio de eficiencia:** reutilizar evidencia existente > consultar fuente oficial > inspeccionar código nativo concreto > prueba automática local > ensayo manual dirigido. La integración Windows y la publicación corresponden al hito de entrega.
+
 ## Generalización por fórmula o algoritmo
 
 **No exigir una prueba nativa por cada color, zona, superficie o valor continuo.** Para cada familia, localizar primero en los módulos nativos 3.2/2.3 cómo se calculan sus magnitudes: parámetros de entrada, tablas y reglas discretas, ecuaciones y factores resultantes. Implementar en el conversor una **función general parametrizada** o una traducción exacta de magnitudes calculadas, nunca una lista de constantes obtenidas de uno o dos certificados.
