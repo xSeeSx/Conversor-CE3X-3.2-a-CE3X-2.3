@@ -56,6 +56,10 @@ En unidades del ensayo: `dias_23=360`, `ρ_agua≈1 kg/L` absorbida al usar litr
 
 **Continuidad:** después de implementar una adaptación y pasar sus pruebas, seguir con la siguiente tarea, mientras haya acceso al entorno y presupuesto de uso. No publicar una release intermedia y dar por finalizado todo el backlog. Ante una imposibilidad, registrar causa y evidencia concreta, pasar al siguiente pendiente y dejar el documento actualizado.
 
+## Avances posteriores a la 1.5.4
+
+Se generalizó la persiana manual a otros colores, se añadió la aportación anual experimental de autoconsumo EPB, se amplió la termosolar a mejoras de envolvente compatibles y se conservó el multiplicador nativo de los depósitos. Continúan pendientes automatismos, sombras o grafos de mejora sin correspondencia y equipos de aire primario o ventiladores en residencial. [Cobertura por variante](COBERTURA_VARIANTES.md)
+
 ## Backlog siguiente: P1 antes que nuevos ensayos P0
 
 | Prioridad | Funcionalidad | Estado del motor 1.5.3 | Siguiente paso de ingeniería |

@@ -24,7 +24,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass, field
 
-VERSION = '1.5.4'
+VERSION = '1.6.0'
 ROOT = Path(__file__).resolve().parent
 MAX_BYTES = 64 * 1024 * 1024
 BLOCK_NAMES = ['version', 'administrativos', 'generales', 'envolvente', 'instalaciones',
@@ -473,7 +473,8 @@ def adapt_systems(source, audit, profile, path_prefix='instalaciones'):
                 if g in (8, 9):
                     raise ConversionError('E_SYSTEM_UNSUPPORTED',
                         f'{entry[0] if entry else "Equipo"}: ventilacion o ventiladores activos. '
-                        'Falta una representacion residencial 2.3 contrastada para caudal, recuperacion y consumo.',p)
+                        'Los campos de aire primario y ventiladores de 2.3 son para uso terciario. '
+                        'Reducir la renovacion residencial no conserva caudal, recuperacion y consumo.',p)
                 raise ConversionError('E_SYSTEM_UNSUPPORTED','Grupo activo sin regla contrastada; se necesita muestra nativa 2.3',p)
             require(len(entry) in (10,11),'E_SYSTEM_ROW',f'Esperados 10/11 campos; hay {len(entry)}',p)
             require(entry[1] in ('ACS','calefaccion','refrigeracion','climatizacion','mixto2','mixto3'),
@@ -488,13 +489,29 @@ def adapt_systems(source, audit, profile, path_prefix='instalaciones'):
                 audit.change('SYSTEM_FIELD',p+'.length',11,10,'Adaptado registro de instalacion al formato nativo 2.3')
             require(isinstance(entry[-1],str),'E_SYSTEM_SUBGROUP','Subgrupo de instalacion no valido',p)
             accumulation=entry[8]
-            if isinstance(accumulation,list) and len(accumulation)==7:
-                removed=accumulation.pop()
-                require(scalar(removed),'E_SYSTEM_TAIL','Campo adicional de acumulacion desconocido',p+'[8][6]')
-                audit.loss(p+'[8][6]',removed,'Campo adicional de acumulacion ACS 3.2',
-                           element=str(entry[0]), dependencies='Revisar el deposito y su UA')
-                audit.event('WARNING','W_DHW_FIELD','Retirado campo adicional de acumulacion. Revisar el deposito y su UA en CE3X 2.3.',path=p)
-                audit.change('DHW_ACCUMULATION',p+'[8].length',7,6,'Adaptado deposito ACS al formato 2.3')
+            if isinstance(accumulation, list) and accumulation and accumulation[0] is True:
+                tank = p+'[8]'
+                require(len(accumulation) >= 6 and all(scalar(field) for field in accumulation),
+                        'E_SYSTEM_TAIL', 'Deposito ACS de estructura desconocida', tank)
+                mode = accumulation[5]
+                require((mode == 'Conocido' and len(accumulation) == 6)
+                        or (mode == 'Por defecto' and len(accumulation) in (6, 7))
+                        or (mode == 'Estimado' and len(accumulation) == 9),
+                        'E_SYSTEM_TAIL', 'Metodo o campos del deposito ACS sin correspondencia nativa 2.3', tank)
+                volume = as_num(accumulation[1], tank+'.volumen', minimum=0)
+                high = as_num(accumulation[2], tank+'.consigna_alta')
+                low = as_num(accumulation[3], tank+'.consigna_baja')
+                as_num(accumulation[4], tank+'.UA', minimum=0)
+                require(volume > 0 and high >= low, 'E_SYSTEM_TAIL',
+                        'Volumen o consignas del deposito incoherentes', tank)
+                if mode == 'Estimado':
+                    as_num(accumulation[6], tank+'.espesor_aislamiento', minimum=0)
+                    require(isinstance(accumulation[7], str) and accumulation[7].strip(),
+                            'E_SYSTEM_TAIL', 'Material de aislamiento del deposito desconocido', tank)
+                if len(accumulation) in (7, 9) and not empty(accumulation[-1]):
+                    require(as_num(accumulation[-1], tank+'.multiplicador', minimum=0) > 0,
+                            'E_SYSTEM_TAIL', 'El multiplicador del deposito debe ser positivo', tank)
+                audit.event('INFO','DHW_ACCUMULATION','Deposito ACS conservado en el formato nativo.',path=tank,mode=mode)
             if str(entry[6]).startswith('Estimado'):
                 audit.event('WARNING','W_ESTIMATED_SYSTEM',f'{entry[0]} conserva modo y rendimientos estimados. Recalcular en 2.3.',path=p,mode=entry[6],efficiency=json_value(entry[2]))
             # Deliberadamente no se toman rendimientos ni UA de la plantilla.
@@ -730,7 +747,6 @@ def solar_candidate(generators, systems, general, envelope_changes=False):
         require(s.get('servicio') in (None,'ACS') and s.get('tipo') in (None,'Otro'),
                 'E_SOLAR_SCOPE','Servicio o tipo solar no validado')
         require(s.get('zona')=='Edificio Objeto','E_SOLAR_SCOPE','Solar asignada a una zona no validada')
-        require(not envelope_changes,'E_SOLAR_SCOPE','Mejora combinada con otros cambios no validada')
         zone = general[4]
         require(zone in ACS_TEMPERATURES, 'E_SOLAR_SCOPE',
                 'Temperatura de red sin criterio contrastado para la zona '+str(zone))
@@ -765,7 +781,7 @@ def solar_candidate(generators, systems, general, envelope_changes=False):
         require(math.isfinite(demand) and math.isfinite(production),'E_SOLAR_SCOPE','Balance anual no finito')
         require(0<production<=demand,'E_SOLAR_SCOPE','Produccion nula o superior a la demanda anual; caso no validado')
         return {'percent':production/demand*100,'production':production,'demand':demand,
-                'experimental': (zone, area, flow) != ('D2', 100, 100) or extra_area not in (None, area),
+                'experimental': envelope_changes or (zone, area, flow) != ('D2', 100, 100) or extra_area not in (None, area),
                 'entrada': {'parametros':params, 'produccion_mensual_kwh': monthly, 'potencia_original': power},
                 'formula': '100 * suma(produccion_mensual_kwh) / demanda_acs_anual_kwh',
                 'evidencia': 'docs/VALIDACION_SOLAR.md'},''
@@ -791,24 +807,26 @@ def window_protection_issues(source):
                 'E_ACTIVE_SOLAR','Proteccion nueva combinada con otras sombras: no se ha validado su omision',f'huecos[{i}]')
         require(isinstance(w.state.get('tieneProteccionSolar'),bool),
                 'E_ACTIVE_SOLAR','Indicador de proteccion solar desconocido',f'huecos[{i}]')
-        for field in ('correctorFSCTE','correctorFSInvierno','correctorFSVerano'):
+        solar_factors = {}
+        for field, label in zip(('correctorFSCTE','correctorFSInvierno','correctorFSVerano'),
+                                ('CTE','invierno','verano')):
             require(field in w.state,'E_ACTIVE_SOLAR','Falta un factor solar necesario para omitir la proteccion',f'huecos[{i}].{field}')
-            as_num(w.state[field],f'huecos[{i}].{field}',minimum=0)
+            solar_factors[label] = as_num(w.state[field],f'huecos[{i}].{field}',minimum=0)
         indices.append(i)
-        values = [as_num(w.state[key],f'huecos[{i}].{key}')
-                  for key in ('correctorFSCTE','correctorFSInvierno','correctorFSVerano')]
-        if tail == [True, 'Manuales', 'Blanco'] and w.state['tieneProteccionSolar'] and all(v <= 1 for v in values):
-            factors.append(dict(zip(('CTE','invierno','verano'), values), hueco=w.state['descripcion']))
+        if (tail[1] == 'Manuales' and tail[2].strip() and w.state['tieneProteccionSolar']
+                and all(v <= 1 for v in solar_factors.values())):
+            factors.append(dict(solar_factors, hueco=w.state['descripcion'], color=tail[2]))
     if not indices:return []
     require(not source[5],'E_ACTIVE_SOLAR','Protecciones nuevas con medidas de mejora: falta contrastar sus copias y referencias')
     active=sum(source[3][1][i].state['tieneProteccionSolar'] for i in indices)
     names=', '.join(str(source[3][1][i].state.get('descripcion',i+1)) for i in indices)
     candidate = {'experimental': True, 'factores': factors} if len(factors) == len(indices) else None
-    experiment = ('ADAPTACION EXPERIMENTAL: sustituye solo la persiana manual blanca por Otros. '
-                  'Conserva los dos factores estacionales. El corrector CTE pasa a 1 y se pierde el dispositivo. '
+    experiment = ('ADAPTACION EXPERIMENTAL: sustituye las persianas manuales por Otros. '
+                  'Conserva los dos factores estacionales guardados. El corrector CTE pasa a 1. '
+                  'Se pierden el tipo de dispositivo y su color. '
                   'Valores originales (CTE, invierno, verano): ' +
-                  '; '.join(f"{v['hueco']}: {v['CTE']}, {v['invierno']}, {v['verano']}" for v in factors)
-                  + '. Recalcular y revisar en CE3X 2.3.') if candidate else None
+                  '; '.join(f"{v['hueco']} ({v['color']}): {v['CTE']}, {v['invierno']}, {v['verano']}" for v in factors)
+                  + '. Recalcular y comparar ambos certificados.') if candidate else None
     return [{'id':'window-protection:building','kind':'window_protection','name':'Protecciones solares nuevas en huecos',
              'context':'edificio','candidate':candidate,'window_indices':indices,'experimental_message':experiment,
              'message':f'{len(indices)} huecos tienen configuracion adicional de proteccion solar 3.2 ({active} con la proteccion activada): '+names+'. '
@@ -819,8 +837,58 @@ def window_protection_issues(source):
                        'Cancelar no genera salida. El original se conserva.'}]
 
 
+def electric_generation_issues(source):
+    systems = source[4]
+    if len(systems) != 14 or empty(systems[13]):
+        return []
+    generators = systems[13]
+    require(isinstance(generators, list) and all(
+        isinstance(g, CexObject) and g.cls == GlobalRef('models', 'GeneradorElectrico') for g in generators),
+        'E_NEW_SYSTEM', 'Grupo electrico mensual de formato desconocido', 'instalaciones[13]')
+    require(not source[5], 'E_NEW_SYSTEM',
+            'Generacion electrica mensual con mejoras: faltan correspondencias para sus copias', 'instalaciones[13]')
+    valid_zones = {'Edificio Objeto'} | {z.state.get('nombre') for z in source[7]
+                                       if isinstance(z, CexObject) and isinstance(z.state.get('nombre'), str)}
+    issues = []
+    for i, generator in enumerate(generators):
+        path = f'instalaciones[13][{i}]'
+        state = generator.state
+        require(set(SOLAR_MONTHS) | {'nombre', 'zona', 'potencia'} <= set(state)
+                and set(state) <= SOLAR_FIELDS - {'servicio'} and state.get('tipo') is None,
+                'E_NEW_SYSTEM', 'Generacion electrica mensual: falta un autoconsumo computable por servicio '
+                'con estructura reconocida. Se requiere la serie EPB nativa.', path)
+        require(isinstance(state['nombre'], str) and state['nombre'].strip()
+                and isinstance(state['zona'], str) and state['zona'] in valid_zones,
+                'E_NEW_SYSTEM', 'Nombre o zona del generador electrico no reconocidos', path)
+        ident = state.get('id')
+        require(ident is None or isinstance(ident, CexObject) and ident.cls == GlobalRef('uuid', 'UUID')
+                and set(ident.state) == {'int'} and type(ident.state['int']) is int,
+                'E_NEW_SYSTEM', 'Identificador electrico mensual desconocido', path)
+        monthly = {m: as_num(state[m], f'{path}.{m}', minimum=0) for m in SOLAR_MONTHS}
+        calculated = state.get('consumoMensual')
+        require(calculated is None or isinstance(calculated, list) and len(calculated) in (0, 12)
+                and (not calculated or [as_num(v, path+'.consumoMensual', minimum=0)
+                                       for v in calculated] == list(monthly.values())),
+                'E_NEW_SYSTEM', 'El balance mensual calculado no coincide con el autoconsumo EPB declarado', path)
+        annual = sum(monthly.values())
+        require(math.isfinite(annual), 'E_NEW_SYSTEM', 'Autoconsumo electrico anual no finito', path)
+        power = as_num(state['potencia'], f'{path}.potencia', minimum=0)
+        name = state['nombre']
+        message = f'{name} ({state["zona"]}). Omitir elimina el generador y su autoconsumo de la salida.'
+        experiment = (f'{name} ({state["zona"]}). Se propone una contribucion anual de '
+                      f'{annual:.12g} kWh de autoconsumo EPB. Se pierden el reparto mensual, la potencia '
+                      'y el identificador. El reparto por servicios y su efecto energetico pueden cambiar. '
+                      'Recalcular y comparar ambos certificados.')
+        issues.append({'id':f'electric:{i}', 'kind':'electric_generation', 'path':path,
+                       'name':name, 'context':'edificio', 'message':message, 'experimental_message':experiment,
+                       'candidate':{'experimental':True, 'autoconsumo_epb_anual_kwh':annual,
+                                    'autoconsumo_epb_mensual_kwh':monthly, 'potencia_original':power,
+                                    'zona':state['zona']}})
+    return issues
+
+
 def solar_issues(source):
-    issues=window_protection_issues(source)
+    issues=window_protection_issues(source) + electric_generation_issues(source)
     contexts=[('edificio',source[4],source[2],False,None)]
     for i,m in enumerate(source[5]):
         if not isinstance(m,CexObject):continue
@@ -833,10 +901,25 @@ def solar_issues(source):
         require(index is not None or not source[5], 'E_SOLAR_SCHEMA',
                 'Termosolar del edificio con mejoras: dependencias sin contraste', context)
         if index is not None:
-            copies = source[5][index].state.get('listadoGeneradoresTermosolarMM')
+            measure = source[5][index].state
+            copies = measure.get('listadoGeneradoresTermosolarMM')
             require(isinstance(copies, list) and typed_value(copies) == typed_value(systems[12]),
                     'E_SOLAR_SCHEMA','Copias de los generadores de la mejora no coinciden',context)
         candidate,reason=solar_candidate(systems[12],systems,general,changed)
+        if candidate and changed:
+            if (typed_value(measure.get('medidasMejoraEnvolvente')) != typed_value(measure['mejoras'][0])
+                    or measure['mejoras'][1][2] is not True):
+                candidate, reason = None, 'Las definiciones de envolvente o instalaciones de la mejora no coinciden'
+            for key in ('datosEdificioOriginal', 'datosNuevoEdificio'):
+                model = measure.get(key)
+                if model is None:
+                    continue
+                params = model.state.get('datosGenerales') if isinstance(model, CexObject) else None
+                if (not isinstance(params, list) or len(params) < 21
+                        or params[4] != general[4]
+                        or any(as_num(params[k], key) != as_num(general[k], key) for k in (6, 9))):
+                    candidate, reason = None, 'La mejora combinada no conserva la zona, superficie o demanda diaria de ACS'
+                    break
         for generator in systems[12]:
             key=solar_key(generator)
             require(all(item['id']!=key for item in issues),'E_SOLAR_SCHEMA',
@@ -851,6 +934,8 @@ def solar_issues(source):
                        f"{candidate['entrada']['parametros']['temperatura_agua_fria_c']} C. ")
                 if candidate['experimental']:
                     desc+='ADAPTACION EXPERIMENTAL: balance anual sin equivalencia energetica completa. '
+                if changed:
+                    desc+='Se conservan las actuaciones de envolvente, los costes y las referencias de la mejora. '
             else:desc+='Adaptacion no validada: '+reason+'. '
             desc+=('Omitir elimina esta instalacion solar de la salida. ' if context=='edificio' else
                    'Omitir elimina TODO este conjunto de mejora, incluidos sus costes y otras actuaciones. ')
@@ -920,6 +1005,21 @@ def resolve_solar(source, choices, audit, manifest, issues, profile):
                 'E_SOLAR_SCOPE','Esta adaptacion requiere su modalidad de consentimiento explicita')
     if not issues:return source
     out=copy.deepcopy(source)
+    electric = [issue for issue in issues if issue.get('kind') == 'electric_generation']
+    if electric:
+        rows = out[4][6]
+        require(isinstance(rows, list) and all(isinstance(r, list) and r for r in rows),
+                'E_CONTRIBUTION', 'Grupo de contribuciones de forma desconocida')
+        for issue in electric:
+            if choices[issue['id']] != 'experimental':
+                continue
+            candidate = issue['candidate']
+            name = issue['name'] + ' (adaptado 2.3)'
+            require(all(r[0] != name for r in rows), 'E_CONTRIBUTION', 'Nombre de contribucion duplicado', issue['path'])
+            rows.append([name, LegacyString('Contribuciones energéticas'), ['', '', '', False],
+                         [format(candidate['autoconsumo_epb_anual_kwh'], '.15g')] + [''] * 5,
+                         [False, True], candidate['zona']])
+        out[4][13] = []
     for issue in issues:
         if issue.get('kind')!='window_protection':continue
         experimental = choices[issue['id']] == 'experimental'
@@ -996,11 +1096,12 @@ def resolve_solar(source, choices, audit, manifest, issues, profile):
         # A whole-group decision still requires a recognized group and graph.
         convert_measures([out[5][i] for i in sorted(removed_indices)], [], profile, Audit())
         remove_solar_measures(out, removed_indices, audit)
+    reasons = {'window_protection':'Proteccion solar nueva', 'electric_generation':'Generacion electrica mensual'}
     for issue in issues:
         choice=choices[issue['id']]
         message = (issue.get('experimental_message') or issue['message']) if choice == 'experimental' else issue['message']
-        audit.omit(issue['context']+'.solar', issue,
-                   'Proteccion solar nueva' if issue.get('kind') == 'window_protection' else 'Instalacion termosolar mensual',
+        audit.omit(issue.get('path', issue['context']+'.solar'), issue,
+                   reasons.get(issue.get('kind'), 'Instalacion termosolar mensual'),
                    risk='modelo', operation={'adapt':'adaptar','experimental':'adaptar experimentalmente','omit':'omitir'}[choice],
                    element=issue['name'], count=len(issue.get('window_indices',[None])),
                    dependencies=message)
@@ -1118,7 +1219,7 @@ def check_preservation(src,dst,fix_accents):
     for g in range(min(6,len(src[4]))):
         require(len(src[4][g])==len(dst[4][g]),'E_PRESERVATION','Numero de equipos alterado')
         for a,b in zip(src[4][g],dst[4][g]):
-            for index in (1,2,3,4,5,6,7):
+            for index in (1,2,3,4,5,6,7,8):
                 require(json_value(a[index])==json_value(b[index]),'E_PRESERVATION','Datos termicos de instalaciones alterados',f'instalaciones[{g}][{index}]')
 
 

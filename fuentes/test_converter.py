@@ -149,7 +149,7 @@ class ConverterTests(unittest.TestCase):
         dst=c.read_cex(run.output)
         self.assertEqual(dst[3][0],self.src[3][0]);self.assertEqual(dst[4][5][0][2],[374.8,275.8,485.4])
         self.assertEqual(dst[4][5][0][6],'Estimado según Instalación')
-        self.assertEqual(len(dst[4][5][0]),10);self.assertEqual(len(dst[4][5][0][8]),6)
+        self.assertEqual(len(dst[4][5][0]),10);self.assertEqual(dst[4][5][0][8],self.src[4][5][0][8])
         self.assertEqual(dst[3][1][0].cls,self.src[3][1][0].cls)
         self.assertNotIn('id',dst[3][1][0].state)
         self.assertEqual(len(dst[3][1][0].state['elementosProteccionSolar']),25)
@@ -221,6 +221,31 @@ class ConverterTests(unittest.TestCase):
     def test_window_protection_cancel_does_not_write(self):
         self.blind_fixture();self.source_path.write_bytes(c.encoded(self.src));inp=io.StringIO(json.dumps({'command':'convert','source':str(self.source_path)})+'\n'+json.dumps({'command':'decision','id':'window-protection:building','choice':'cancel'})+'\n');out=io.StringIO()
         c.serve(inp,out);self.assertIn('DECISION_EXPERIMENTAL',out.getvalue());self.assertIn('CANCELADO',out.getvalue());self.assertFalse(c.output_path(self.source_path).exists())
+
+    def test_manual_blind_reuses_stored_factors_regardless_of_color(self):
+        self.blind_fixture()
+        state = self.src[3][1][0].state
+        state['correctorFSInvierno'] = 0.84
+        state['correctorFSVerano'] = 0.27
+        for color in ('Blanco', 'Oscuro', 'Gris'):
+            with self.subTest(color=color):
+                state['elementosProteccionSolar'][27] = color
+                code, plan = self.run_convert()
+                self.assertEqual(code, 2, plan.summary)
+                code, result = self.accept(plan, 'experimental')
+                self.assertEqual(code, 0, result.summary)
+                converted = c.read_cex(result.output)[3][1][0].state
+                self.assertEqual(converted['elementosProteccionSolar'][23:], [True, ['0.84', '0.27']])
+                self.assertEqual(converted['correctorFSCTE'], 1)
+                self.assertIn(color, result.manifest['decision_summary'])
+                result.output.unlink()
+
+    def test_blind_with_unknown_control_stays_omission_only(self):
+        self.blind_fixture()
+        self.src[3][1][0].state['elementosProteccionSolar'][26] = 'Automáticas'
+        code, plan = self.run_convert()
+        self.assertEqual(code, 2, plan.summary)
+        self.assertNotIn('experimental', plan.manifest['pending_plan']['options'])
     def test_active_new_solar_option(self):
         src=copy.deepcopy(self.src);src[3][1][0].state['elementosProteccionSolar'][-1]='activo';self.assertFailure('E_ACTIVE_SOLAR',src)
     def test_new_general_field(self):
@@ -688,6 +713,43 @@ class ConverterTests(unittest.TestCase):
         self.assertEqual(result.manifest['error_code'], 'E_SYSTEM_UNSUPPORTED')
         self.assertIn('caudal, recuperacion y consumo', result.summary)
         self.assertFalse(result.output.exists())
+
+    def test_electric_monthly_epb_sum_requires_experimental_consent(self):
+        monthly = [35.5, 0, 12.25, 0, 20, 0, 80, 0, 0, 1.25, 0, 0]
+        state = dict(zip(c.SOLAR_MONTHS, monthly), nombre='Autoconsumo', zona='Edificio Objeto',
+                     potencia=3.5, tipo=None, consumoMensual=list(monthly))
+        self.src[4][13] = [c.CexObject(c.GlobalRef('models', 'GeneradorElectrico'), state)]
+        code, plan = self.run_convert()
+        self.assertEqual(code, 2, plan.summary)
+        self.assertFalse(plan.output.exists())
+        self.assertEqual(set(plan.manifest['pending_plan']['options']), {'omit', 'experimental'})
+        code, adapted = self.accept(plan, 'experimental')
+        self.assertEqual(code, 0, adapted.summary)
+        rows = c.read_cex(adapted.output)[4][6]
+        self.assertEqual(rows[0][2:], [['', '', '', False], ['149', '', '', '', '', ''],
+                                      [False, True], 'Edificio Objeto'])
+        self.assertEqual(c.sha(self.source_path), plan.manifest['source_sha256'])
+        self.assertIn('reparto mensual', adapted.manifest['decision_summary'])
+        adapted.output.unlink()
+        code, omitted = self.accept(plan)
+        self.assertEqual(code, 0, omitted.summary)
+        self.assertEqual(c.read_cex(omitted.output)[4][6], [])
+        omitted.output.unlink()
+        state['consumoMensual'][6] = 2
+        self.assertFailure('E_NEW_SYSTEM')
+
+    def test_acs_deposit_retains_native_modes_and_multiplier(self):
+        for tank in ([True,'200','60','50','51.9','Por defecto','10'],
+                     [True,'200','60','50','7.5','Conocido'],
+                     [True,'1000','80','60','1.7','Estimado','0.065','Poliuretano Rígido','2.5']):
+            with self.subTest(tank=tank):
+                self.src[4][5][0][8] = tank
+                code, result = self.run_convert()
+                self.assertEqual(code, 0, result.summary)
+                self.assertEqual(c.read_cex(result.output)[4][5][0][8], tank)
+                result.output.unlink()
+        self.src[4][5][0][8] = [True,'200','60','50','51.9','Modo desconocido','10']
+        self.assertFailure('E_SYSTEM_TAIL')
     def test_solar_stale_choice_and_changed_file_rejected(self):
         self.solar_fixture();code,a=self.solar_convert({'unknown':'omit'})
         self.assertEqual(code,1)
@@ -729,6 +791,23 @@ class ConverterTests(unittest.TestCase):
         self.assertEqual(rows, measure['datosInstalaciones'][6])
         self.assertEqual(rows, measure['mejoras'][1][1][6])
         self.assertAlmostEqual(float(rows[0][2][0]), 100 * 1413.258 / 2284.6208, places=9)
+
+    def test_solar_measure_combines_with_a_native_envelope_definition(self):
+        group = self.solar_measure_fixture()
+        envelope = ['Aislamiento', 'Adición de Aislamiento Térmico',
+                    [True, False, False, False, '', '', '0.03', '0.04', '', '', False, [], '']]
+        group.state['mejoras'][0] = [envelope]
+        group.state['medidasMejoraEnvolvente'] = [envelope]
+        code, plan = self.solar_convert()
+        self.assertEqual(code, 2, plan.summary)
+        code, result = self.accept(plan, 'experimental')
+        self.assertEqual(code, 0, result.summary)
+        target = c.read_cex(result.output)
+        measures = target[5][0].state
+        self.assertEqual(measures['mejoras'][0][0][1], envelope[1])
+        self.assertEqual(measures['mejoras'][1][1][6][0][2][0], '70')
+        self.assertEqual(target[6:7], self.src[6:7])
+        self.assertEqual(target[11], self.src[11])
 
     def test_solar_omit_measure_removes_report_and_cost_references(self):
         self.solar_measure_fixture();code,a=self.solar_convert({'91':'omit'})
@@ -788,7 +867,7 @@ class ConverterTests(unittest.TestCase):
         before = c.sha(self.source_path)
         self.assertFalse(analysis.output.exists())
         expected = {'edificio.solar', 'administrativos[26]', 'generales[22]',
-                    'instalaciones[5][0][9]', 'instalaciones[5][0][8][6]', 'complementos.Icaen'}
+                    'instalaciones[5][0][9]', 'complementos.Icaen'}
         self.assertEqual({item['path'] for item in analysis.audit.losses}, expected)
         commands = [{'command':'convert','source':str(self.source_path),'template':str(self.template_path)},
                     {'command':'decision','id':analysis.manifest['pending_plan']['id'],'choice':'omit'}]
