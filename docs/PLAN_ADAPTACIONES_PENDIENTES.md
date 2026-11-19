@@ -2,6 +2,8 @@
 
 Documento de trabajo para Codex. **No describe funcionalidades ya disponibles.** Priorizar el uso del banco local y los ejecutables CE3X 2.3 y 3.2 instalados. Cada equivalencia requiere evidencia nativa y pruebas de regresión. No hacer promesas de compatibilidad sin validación.
 
+**Investigación eficiente:** priorizar documentación oficial y las reglas/fórmulas ya publicadas antes de abrir CE3X o diseñar ensayos. Implementar funciones generales en código y probar por algoritmo, no por color o zona. Hacer ensayos nativos solo cuando una correspondencia, una interpretación energética o el formato de destino no estén acreditados; reutilizar los ensayos existentes. Consultar la metodología obligatoria de `AGENTS.md`.
+
 **Control de cobertura obligatorio:** [docs/COBERTURA_VARIANTES.md](COBERTURA_VARIANTES.md). No considerar «adaptada» una categoría entera cuando solo se ha ensayado una variante. Inventariar subtipos, opciones, condiciones y resultados por combinación relevante antes de cerrar cada prioridad.
 
 **Fórmulas físicas, ejemplos numéricos y pruebas preparadas:** [docs/FORMULAS_EQUIVALENCIAS_PENDIENTES.md](FORMULAS_EQUIVALENCIAS_PENDIENTES.md). Contiene recuperación sensible/entálpica, ventiladores, fotovoltaica mensual, persianas y ACS solar. Úsalo para evitar rehacer investigación; no habilites equivalencias sin prueba en CE3X 2.3.
