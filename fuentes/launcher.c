@@ -177,7 +177,7 @@ static LRESULT CALLBACK DecisionProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
     if (msg == WM_CLOSE) { decisionResult = IDCANCEL; DestroyWindow(hwnd); return 0; }
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
-static int conversionDecision(const WCHAR *message, int canAdapt) {
+static int conversionDecision(const WCHAR *message, int canAdapt, int experimental) {
     WNDCLASSW wc = {0}; wc.lpfnWndProc = DecisionProc; wc.hInstance = GetModuleHandleW(NULL);
     wc.lpszClassName = L"CE3XConversionDecision"; wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1); RegisterClassW(&wc);
@@ -189,7 +189,7 @@ static int conversionDecision(const WCHAR *message, int canAdapt) {
     HWND body = CreateWindowExW(0, L"EDIT", message, WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
         20, 18, 650, 165, dialog, NULL, wc.hInstance, NULL);
     SendMessageW(body, WM_SETFONT, (WPARAM)font, TRUE);
-    HWND adapt = CreateWindowExW(0,L"BUTTON",L"Adaptar y convertir",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+    HWND adapt = CreateWindowExW(0,L"BUTTON",experimental ? L"Adaptar (experimental)" : L"Adaptar y convertir",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
         20,205,190,36,dialog,(HMENU)501,wc.hInstance,NULL);
     HWND omit = CreateWindowExW(0,L"BUTTON",L"Omitir lo indicado y convertir",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
         225,205,230,36,dialog,(HMENU)502,wc.hInstance,NULL);
@@ -234,12 +234,14 @@ static void received(void) {
     if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, second + 1, -1, message, RESPONSECAP)) {
         report(L"No se pudo mostrar el inventario del motor."); setBusy(0); return;
     }
-    if (operation == 1 && (strcmp(response,"DECISION_ADAPT")==0 || strcmp(response,"DECISION_OMIT")==0)) {
+    int experimental = strcmp(response,"DECISION_EXPERIMENTAL")==0;
+    if (operation == 1 && (experimental || strcmp(response,"DECISION_ADAPT")==0 || strcmp(response,"DECISION_OMIT")==0)) {
         if (window) KillTimer(window,1);
-        int selected = conversionDecision(message,strcmp(response,"DECISION_ADAPT")==0);
+        int selected = conversionDecision(message,experimental || strcmp(response,"DECISION_ADAPT")==0,experimental);
         WCHAR json[COMMANDCAP] = L"{\"command\":\"decision\",\"id\":";
         if (!appendJson(json,path)) { setBusy(0); return; }
-        wcscat(json,selected==501 ? L",\"choice\":\"adapt\"}" : selected==502 ? L",\"choice\":\"omit\"}" : L",\"choice\":\"cancel\"}");
+        wcscat(json,selected==501 ? (experimental ? L",\"choice\":\"experimental\"}" : L",\"choice\":\"adapt\"}") :
+            selected==502 ? L",\"choice\":\"omit\"}" : L",\"choice\":\"cancel\"}");
         setBusy(0); request(json,1); return;
     }
     if (operation == 1) {
@@ -395,7 +397,7 @@ static void initializeUI(void) {
     headerBrush = CreateSolidBrush(UI_HEADER);
     HWND title = control(L"STATIC", L"Conversor CE3X 3.2 \x2192 2.3", SS_CENTERIMAGE, 36, 31, 688, 33, IDC_TITLE);
     SendMessageW(title, WM_SETFONT, (WPARAM)titleFont, TRUE);
-    HWND version = control(L"STATIC", L"v1.5.3  |  Residencial", 0, 37, 66, 420, 18, IDC_VERSION);
+    HWND version = control(L"STATIC", L"v1.5.4  |  Residencial", 0, 37, 66, 420, 18, IDC_VERSION);
     SendMessageW(version, WM_SETFONT, (WPARAM)smallFont, TRUE);
     control(L"STATIC", L"Archivo de entrada", SS_CENTERIMAGE, 36, 123, 140, 30, IDC_INPUT_LABEL);
     sourceEdit = control(L"EDIT", L"", ES_AUTOHSCROLL | WS_TABSTOP, 182, 123, 403, 30, IDC_SOURCE);
@@ -546,7 +548,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR commandLine, i
     }
     if (argc >= 3 && wcscmp(argv[1], L"--preview-decision") == 0) {
         decisionPreviewPath=argv[2]; ShowWindow(window,SW_SHOWNORMAL); UpdateWindow(window);
-        conversionDecision(L"Edificio: SOLAR_MENSUAL. Produccion 1413.258 kWh/ano. Se propone cobertura ACS 70 %. Se pierden reparto mensual y potencia solar. Adaptacion ensayada solo con ACS electrico sin acumulacion, zona D2. Omitir elimina esta instalacion solar de la salida. Revisar y recalcular en CE3X 2.3. El original se conserva.", argc < 4 || wcscmp(argv[3],L"omit") != 0);
+        conversionDecision(L"Edificio: SOLAR_MENSUAL. Produccion 1413.258 kWh/ano. Se propone cobertura ACS 70 %. Se pierden reparto mensual y potencia solar. Omitir elimina esta instalacion. Revisar y recalcular en CE3X 2.3.", argc < 4 || wcscmp(argv[3],L"omit") != 0,0);
         DestroyWindow(window); LocalFree(argv); return decisionPreviewSaved ? 0 : 1;
     }
     if (argc >= 3 && wcscmp(argv[1], L"--preview") == 0) {
