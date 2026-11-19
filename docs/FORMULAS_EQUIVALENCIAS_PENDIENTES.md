@@ -1,6 +1,6 @@
 # Fórmulas candidatas para adaptaciones CE3X 3.2 → 2.3
 
-**Encargo técnico para Codex, no funcionalidad implementada.** Fórmulas físicas y pruebas preparadas para ahorrar investigación repetida. **Una fórmula físicamente correcta no demuestra que el campo de destino residencial 2.3 la reproduzca.** Antes de habilitar cada adaptación, comprobar en los ejecutables nativos CE3X 3.2 y 2.3, guardar modelos de control y validar el CEX convertido. No modificar el caudal higiénico exigible ni ocultar pérdidas.
+**Documento de cálculo y validación, no funcionalidad implementada.** Fórmulas físicas y pruebas preparadas para ahorrar investigación repetida. **Una fórmula físicamente correcta no demuestra que el campo de destino residencial 2.3 la reproduzca.** Antes de habilitar cada adaptación, comprobar en los ejecutables nativos CE3X 3.2 y 2.3, guardar modelos de control y validar el CEX convertido. No modificar el caudal higiénico exigible ni ocultar pérdidas.
 
 ## 1. Recuperador de calor aire-aire sensible, candidato P2
 
