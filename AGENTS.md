@@ -1,5 +1,9 @@
 # Instrucciones para Codex y otros agentes de desarrollo
 
+## Fórmulas y límites ya investigados
+
+Antes de investigar las equivalencias P0-P3, lee [docs/FORMULAS_EQUIVALENCIAS_PENDIENTES.md](docs/FORMULAS_EQUIVALENCIAS_PENDIENTES.md). Contiene ecuaciones, unidades, contraejemplos y pruebas de recuperadores, ventiladores, generación eléctrica mensual, persianas y solar térmica. **Reutilizar y contrastar** en los ejecutables nativos, sin gastar una sesión repitiendo derivaciones físicas. Las fórmulas candidatas no son adaptaciones activas.
+
 ## Próxima prioridad de implementación
 
 **P0: solar térmica adaptada a los datos reales del certificado.** Lee y ejecuta primero [docs/PLAN_ADAPTACIONES_PENDIENTES.md](docs/PLAN_ADAPTACIONES_PENDIENTES.md): eliminar las restricciones arbitrarias D2/100 m²/100 L/día, calcular a partir de la demanda real y validar en CE3X 2.3 y 3.2. No dar por válida una fórmula general sin ensayos ni borrar elementos sin consentimiento. Después abordar el backlog del mismo documento según prioridad. Este es un objetivo pendiente, **no una funcionalidad ya implementada**.
