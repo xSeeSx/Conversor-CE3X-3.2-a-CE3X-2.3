@@ -1,6 +1,6 @@
 # Cobertura real de variantes y equivalencias CE3X 3.2 → 2.3
 
-Documento de control para Codex. **Una funcionalidad que funciona en un ejemplo NO está adaptada universalmente.** Separar siempre: (1) formato CEX 2.3 válido, (2) datos transferidos o simplificados, (3) equivalencia energética contrastada y (4) condiciones de aplicación.
+Documento técnico de control de compatibilidad. **Una funcionalidad que funciona en un ejemplo NO está adaptada universalmente.** Separar siempre: (1) formato CEX 2.3 válido, (2) datos transferidos o simplificados, (3) equivalencia energética contrastada y (4) condiciones de aplicación.
 
 ## Regla de clasificación obligatoria
 
@@ -41,7 +41,7 @@ En `docs/MATRIZ_COMPATIBILIDAD.md` y, si conviene, aquí, cada conversión neces
 | Mejoras con elementos nuevos | Determinadas mejoras comunes, equipos y costes se conservan. | Mejoras con dependencias o generadores 3.2 nuevos, combinaciones con protecciones y solar que no se pueden trasladar íntegramente. |
 | Acumulación y componentes nuevos | Datos comunes en estructuras conocidas. | Métodos de cálculo del depósito, tipos estimados, varios depósitos y estructuras desconocidas. |
 
-Esta tabla es **inventario parcial**, no una lista completa de todas las opciones de interfaz 3.2. Codex debe explorar opciones reales y anexar las descubiertas por categoría.
+Esta tabla es **inventario parcial**, no una lista completa de todas las opciones de interfaz 3.2. Se deben explorar las opciones reales y añadir las variantes descubiertas por categoría.
 
 ## Ampliaciones sobre la v1.5.4
 
