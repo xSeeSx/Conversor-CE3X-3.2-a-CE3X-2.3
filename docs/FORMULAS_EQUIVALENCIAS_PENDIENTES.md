@@ -127,7 +127,7 @@ OtroInvierno_23 = correctorFSInvierno_32
 OtroVerano_23   = correctorFSVerano_32
 ```
 
-reprodujo indicadores anuales **para la vivienda ensayada** pero modificó `correctorFSCTE` a 1. Esto **no es** una equivalencia completa. Ver `docs/EQUIVALENCIAS_Y_LIMITES.md`. Las persianas manuales/automáticas, colores, uso estacional, patrones de sombras y medidas de mejora necesitan contrastes separados. No combinar factores multiplicándolos sin demostrar cómo los combina el motor.
+reprodujo indicadores anuales **para la vivienda ensayada** pero modificó `correctorFSCTE` a 1. Esto **no es** una equivalencia completa. Ver `docs/EQUIVALENCIAS_Y_LIMITES.md`. No se requiere un ensayo de certificado por cada color o zona si se demuestra una **fórmula/tabla nativa general** para sus efectos. Investigar si los factores exportados por CE3X 3.2 ya incorporan el color y son actuales; en tal caso, la traducción puede basarse en esos resultados. En caso contrario, reproducir el cálculo parametrizado en el código cuando sea justificable. Separar ramas con lógica distinta: manual/automática, sombras adicionales, mejoras, controles estacionales. Ensayar una muestra representativa por rama y tests unitarios sobre opciones y límites. No combinar factores multiplicándolos sin demostrar cómo los combina el motor.
 
 ## 5. Solar térmica ACS, P0: usar datos del certificado
 
