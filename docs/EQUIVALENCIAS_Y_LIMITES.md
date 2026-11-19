@@ -1,6 +1,6 @@
 # Equivalencias y límites de conversión
 
-La versión 1.5.3 incorpora la evidencia de las sesiones originales. Las extensiones experimentales descritas aquí están en desarrollo. Para atribuir una diferencia al conversor hacen falta tres resultados. Se comparan primero los modelos nativos 3.2 y 2.3 de la misma configuración. Después se compara el 2.3 convertido con la referencia nativa 2.3. El banco local genera las diferencias absolutas y relativas para magnitudes con igual unidad. Cuando la base es cero, informa solo de la diferencia absoluta. [Matriz](MATRIZ_COMPATIBILIDAD.md) · [Banco local](VALIDACION_REAL.md)
+La versión 1.5.3 incorpora la evidencia de las sesiones originales. La 1.5.4 añade las opciones experimentales de ACS y persianas descritas aquí. Para atribuir una diferencia al conversor hacen falta tres resultados. Se comparan primero los modelos nativos 3.2 y 2.3 de la misma configuración. Después se compara el 2.3 convertido con la referencia nativa 2.3. El banco local genera las diferencias absolutas y relativas para magnitudes con igual unidad. Cuando la base es cero, informa solo de la diferencia absoluta. [Matriz](MATRIZ_COMPATIBILIDAD.md) · [Banco local](VALIDACION_REAL.md)
 
 ## Persianas de huecos
 
@@ -40,7 +40,7 @@ Las regresiones prueban D1, D2 y C3 con superficies, volúmenes y temperaturas d
 | D1 | 150 | 112 | 480 | 15,23 | 12,03 | 23,51 | 3,98 |
 | D2 | 85 | 75 | 744 | 17,81 | 9,06 | 17,71 | 3,00 |
 
-Los cuatro CEX se abrieron, recalcularon, guardaron y exportaron en sus respectivas versiones. Las cifras de la tabla coinciden entre los dos motores al centésimo. En 2.3 se usa el indicador por vector de electricidad peninsular y en 3.2 el total de ACS, que en estos ensayos solo tiene un equipo y vector. Los consumos finales coinciden también con el balance proyectado. Para exportar en 3.2 se completaron las plantas y la potencia de ACS. CE3X 3.2 generó ambos XML con avisos de validación de esquema en `Sistemas` e `Id`; D2 además exportó `Parcela` como `None`. Los indicadores se pudieron extraer. La comparación respalda estos dos casos energéticos y la adaptación general sigue siendo experimental. [Ensayo histórico](VALIDACION_SOLAR.md) · [Fixture D2](../fuentes/fixtures/solar_d2_ensayos.json)
+Los cuatro CEX se abrieron, recalcularon, guardaron y exportaron en sus respectivas versiones. Las cifras de la tabla coinciden entre los dos motores al centésimo. En 2.3 se usa el indicador por vector de electricidad peninsular y en 3.2 el total de ACS, que en estos ensayos solo tiene un equipo y vector. Los consumos finales coinciden también con el balance proyectado. Tras corregir el UUID termosolar y la referencia catastral de los casos de prueba, los dos XML exportados directamente por CE3X 3.2 superaron su esquema Relax NG. El exportador requirió introducir la potencia nominal de 2 kW del equipo de ACS de ensayo. La comparación respalda estos dos casos y la adaptación general sigue siendo experimental. [Ensayo histórico](VALIDACION_SOLAR.md) · [Fixture D2](../fuentes/fixtures/solar_d2_ensayos.json)
 
 ## Generación eléctrica, instalaciones y ventilación
 
