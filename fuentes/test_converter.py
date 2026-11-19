@@ -26,7 +26,7 @@ class ConverterTests(unittest.TestCase):
             'descripcion':'Vñ','cerramientoAsociado':'Partición superior','superficie':'2',
             'elementosProteccionSolar':['']*25+[False,'',''],'id':c.CexObject(c.GlobalRef('uuid','UUID'),{'int':123},'reduce'),
             'Uvidrio':1.3,'Umarco':1.3,'Gvidrio':.7,'patronSombras':'Sin patrón'})]
-        self.src[4][5]=[['Aerotermia','mixto3',[374.8,275.8,485.4],'Bomba de Calor','Electricidad',[['86.31','100']]*3,'Estimado según Instalación',[['359','487','710'],[True,False,False],[],1],[True,'190','80','60','5.1','Por defecto','1'],['200','200','200'],'Edificio Objeto']]
+        self.src[4][5]=[['Aerotermia','mixto3',[374.8,275.8,485.4],'Bomba de Calor','Electricidad',[['86.31','100']]*3,'Estimado según Instalación',[['359','487','710'],[True,False,False],[],1],[True,'190','80','60','5.1','Por defecto',''],['','',''],'Edificio Objeto']]
         self.source_path=self.root/'origen.cex';self.template_path=self.root/'nativo.cex'
     def tearDown(self):self.temp.cleanup()
     def fixture_measure(self,name='Placas fotovoltaicas'):
@@ -102,6 +102,10 @@ class ConverterTests(unittest.TestCase):
         self.assertEqual(status,1);r=run.manifest
         self.assertEqual(r['error_code'],code);self.assertFalse((run.output).exists())
         self.assertTrue(run.traceback_text);self.assertFalse(list(self.root.glob('*.zip')))
+    def accept(self, analysis, option='omit'):
+        selected = analysis.manifest['pending_plan']['options'][option]
+        return c.convert(self.source_path, self.template_path, solar_choices=selected['choices'],
+                         consent=selected['token'])
     def test_roundtrip_accent_string_unicode(self):c.self_test()
     def test_scanner_latin1_raw_and_escaped(self):
         for literal in (b"S'Partici\xf3n y ni\xf1o'\n.", b"S'Partici\\xf3n y ni\\xf1o'\n."):
@@ -174,7 +178,10 @@ class ConverterTests(unittest.TestCase):
         self.blind_fixture();windows=self.src[3][1];self.partition_fixture();self.src[3][1]=windows
         self.src[3][1][0].state['cerramientoAsociado']=self.src[3][0][0][0]
         self.source_path.write_bytes(c.encoded(self.src));before=self.source_path.read_bytes()
-        code,run=c.convert(self.source_path,c.ROOT/'plantilla_23.cex',solar_choices={'window-protection:building':'omit'})
+        code,analysis=c.convert(self.source_path,c.ROOT/'plantilla_23.cex')
+        self.assertEqual(code,2,analysis.summary)
+        selected=analysis.manifest['pending_plan']['options']['omit']
+        code,run=c.convert(self.source_path,c.ROOT/'plantilla_23.cex',solar_choices=selected['choices'],consent=selected['token'])
         self.assertEqual(code,0,run.summary);dst=c.read_cex(run.output);state=dst[3][1][0].state
         self.assertEqual(len(state['elementosProteccionSolar']),25);self.assertFalse(state['tieneProteccionSolar'])
         for key in ('correctorFSCTE','correctorFSInvierno','correctorFSVerano'):self.assertEqual(state[key],1.0)
@@ -273,7 +280,12 @@ class ConverterTests(unittest.TestCase):
         src=copy.deepcopy(self.src);src[2][6]='nan';self.assertFailure('E_NUMBER',src)
     def test_reset_addons_preserves_economics(self):
         src=copy.deepcopy(self.src);src[6][0]=[['factura original',123]];src[12]={'Isover':'resultado viejo'}
-        _,run=self.run_convert(source=src);dst=c.read_cex(run.output)
+        code,plan=self.run_convert(source=src)
+        self.assertEqual(code,2,plan.summary)
+        self.assertEqual([x['element'] for x in plan.audit.losses],['Isover'])
+        code,run=self.accept(plan)
+        self.assertEqual(code,0,run.summary)
+        dst=c.read_cex(run.output)
         self.assertEqual(dst[6],src[6]);self.assertEqual(dst[12],{})
     def test_truncated_file_diagnostic(self):
         self.source_path.write_bytes(c.encoded(self.src)[:300]);self.template_path.write_bytes(c.encoded(self.template))
@@ -322,17 +334,20 @@ class ConverterTests(unittest.TestCase):
         with self.assertRaises(c.ConversionError):c.InertUnpickler(io.BytesIO(raw),encoding='latin1').load()
     def test_new_general_scalars_recorded(self):
         self.src[2][21:]=['','86.31','1','0','2']
-        code,run=self.run_convert();self.assertEqual(code,0)
-        r=run.audit.omitted
-        self.assertTrue(any(x['path']=='blocks[2][21:]' and x['value']==['','86.31','1','0','2'] for x in r))
-        self.assertIn('W_GENERAL_32',run.audit.log_text())
+        code,run=self.run_convert();self.assertEqual(code,2)
+        self.assertFalse(run.output.exists())
+        self.assertEqual({x['path']:x['value'] for x in run.audit.losses},
+                         {'generales[22]':'86.31','generales[23]':'1','generales[24]':'0','generales[25]':'2'})
+        self.assertEqual(self.accept(run)[0],0)
     def test_new_area_is_recorded_without_replacing_legacy_area(self):
         self.src[2][22]='200'
-        code, attempt = self.run_convert()
+        code, analysis = self.run_convert()
+        self.assertEqual(code, 2, analysis.summary)
+        code, attempt = self.accept(analysis)
         self.assertEqual(code, 0, attempt.summary)
         target = c.read_cex(attempt.output)
         self.assertEqual(target[2][6], '86.31')
-        self.assertTrue(any(item['path']=='blocks[2][21:]' and item['value'][1]=='200'
+        self.assertTrue(any(item['path']=='generales[22]' and item['value']=='200'
                             for item in attempt.audit.omitted))
     def test_unknown_target_class_rejected(self):
         self.src[8].append(c.CexObject(c.GlobalRef('models','Material'),{'nombre':'nuevo'}))
@@ -548,9 +563,13 @@ class ConverterTests(unittest.TestCase):
                      consumoMensual=None,id=c.CexObject(c.GlobalRef('uuid','UUID'),{'int':ident},'reduce'))
         self.src[4][12]=[c.CexObject(c.GlobalRef('models','GeneradorTermosolar'),state)]
         return self.src[4][12][0]
-    def solar_convert(self, choices=None):
+    def solar_convert(self, choices=None, *, accept=False):
         self.source_path.write_bytes(c.encoded(self.src));self.template_path.write_bytes(c.encoded(self.template))
-        return c.convert(self.source_path,self.template_path,solar_choices=choices)
+        status, result = c.convert(self.source_path,self.template_path,solar_choices=choices)
+        if accept:
+            self.assertEqual(status, 2, result.summary)
+            return self.accept(result, 'apply' if 'adapt' in choices.values() else 'omit')
+        return status, result
     def test_solar_requires_choice_and_creates_no_output_or_log(self):
         self.solar_fixture();code,a=self.solar_convert()
         self.assertEqual(code,2);self.assertEqual(a.manifest['status'],'DECISION')
@@ -559,7 +578,7 @@ class ConverterTests(unittest.TestCase):
     def test_solar_adaptation_preserves_annual_effect_of_tested_ce3x_cases(self):
         for values,expected in [([117.7715]*12,70),([0]*6+[1413.258]+[0]*5,70),(list(range(10,22)),9.21275520817855)]:
             with self.subTest(values=values):
-                self.solar_fixture(values);code,a=self.solar_convert({'91':'adapt'})
+                self.solar_fixture(values);code,a=self.solar_convert({'91':'adapt'}, accept=True)
                 self.assertEqual(code,0,a.summary)
                 dst=c.read_cex(a.output);self.assertAlmostEqual(float(dst[4][6][0][2][0]),expected,places=9)
                 self.assertEqual(len(dst[4]),12);self.assertIn('Adaptado',a.manifest['decision_summary'])
@@ -567,7 +586,7 @@ class ConverterTests(unittest.TestCase):
                 a.output.unlink()
     def test_solar_omission_is_explicit_and_preserves_main_equipment(self):
         self.solar_fixture();before=c.typed_value(self.src[4][0])
-        code,a=self.solar_convert({'91':'omit'});self.assertEqual(code,0,a.summary)
+        code,a=self.solar_convert({'91':'omit'}, accept=True);self.assertEqual(code,0,a.summary)
         dst=c.read_cex(a.output);self.assertEqual(dst[4][6],[])
         self.assertEqual(c.typed_value(dst[4][0]),before)
         self.assertTrue(a.manifest['results_require_recalculation'])
@@ -575,7 +594,7 @@ class ConverterTests(unittest.TestCase):
         self.solar_fixture();self.src[4][0][0][8]=[True,'100','80','60','5','Por defecto']
         code,a=self.solar_convert();self.assertIsNone(a.manifest['pending_solar']['candidate'])
         code,a=self.solar_convert({'91':'adapt'});self.assertEqual(code,1);self.assertEqual(a.manifest['error_code'],'E_SOLAR_SCOPE')
-        code,a=self.solar_convert({'91':'omit'});self.assertEqual(code,0,a.summary)
+        code,a=self.solar_convert({'91':'omit'}, accept=True);self.assertEqual(code,0,a.summary)
     def test_solar_unvalidated_climate_or_excess_is_not_offered(self):
         self.solar_fixture();self.src[2][4]='C3'
         self.assertIsNone(c.solar_issues(self.src)[0]['candidate'])
@@ -603,13 +622,15 @@ class ConverterTests(unittest.TestCase):
         self.src[11][0]='MM Solar'
         return m
     def test_solar_measure_adapts_all_definition_copies(self):
-        self.solar_measure_fixture();code,a=self.solar_convert({'91':'adapt'})
+        self.solar_measure_fixture();code,a=self.solar_convert({'91':'adapt'}, accept=True)
         self.assertEqual(code,0,a.summary);m=c.read_cex(a.output)[5][0]
         for rows in [m.state['sistemasContribucionesMM'],m.state['datosInstalaciones'][6],m.state['mejoras'][1][1][6]]:
             self.assertEqual(len(rows),1);self.assertEqual(rows[0][2][0],'70')
         self.assertEqual(len(m.state['datosInstalaciones']),12)
     def test_solar_omit_measure_removes_report_and_cost_references(self):
         self.solar_measure_fixture();code,a=self.solar_convert({'91':'omit'})
+        self.assertEqual(code,2,a.summary)
+        code,a=self.accept(a)
         self.assertEqual(code,0,a.summary);dst=c.read_cex(a.output)
         self.assertEqual(dst[5],[]);self.assertEqual(dst[6][2],[]);self.assertEqual(dst[11][0],'')
     def test_solar_pipe_cancel_produces_no_file(self):
@@ -632,6 +653,96 @@ class ConverterTests(unittest.TestCase):
             manifests=[n for n in z.namelist() if n.endswith('resultado.json')]
             self.assertTrue(manifests)
             manifest=json.loads(z.read(manifests[0]));self.assertEqual(manifest['solar_decisions'][0]['choice'],'adapt')
+
+    def test_active_measure_metadata_preserves_measure_and_references(self):
+        measure = self.fixture_measure('Mejora priorizada')
+        measure.state.update(justificacion='Indicación del técnico', seRecomienda=False)
+        self.src[5] = [measure]
+        self.src[6][2] = [['Instalación','Mejora priorizada','Instalaciones','30','8000','150']]
+        self.src[11][0] = 'Mejora priorizada'
+        code, analysis = self.run_convert()
+        self.assertEqual(code, 2, analysis.summary)
+        self.assertEqual({x['path'] for x in analysis.audit.losses},
+                         {'medidas_mejora[0].justificacion', 'medidas_mejora[0].seRecomienda'})
+        code, result = self.accept(analysis)
+        self.assertEqual(code, 0, result.summary)
+        dest = c.read_cex(result.output)
+        self.assertEqual(dest[5][0].state['nombre'], 'Mejora priorizada')
+        self.assertNotIn('justificacion', dest[5][0].state)
+        self.assertEqual(dest[6:7], self.src[6:7])
+        self.assertEqual(dest[11], self.src[11])
+
+    def test_simultaneous_losses_need_one_worker_decision_and_match_summary(self):
+        self.blind_fixture()
+        self.src[1][26] = 'Clasificación adicional'
+        self.src[2][22] = '200'
+        system = self.src[4][5][0]
+        system[9] = ['200', '200', '200']
+        system[8][6] = '1'
+        self.src[12]['Icaen'] = 'Configuración que se perderá'
+        code, analysis = self.run_convert()
+        self.assertEqual(code, 2, analysis.summary)
+        before = c.sha(self.source_path)
+        self.assertFalse(analysis.output.exists())
+        expected = {'edificio.solar', 'administrativos[26]', 'generales[22]',
+                    'instalaciones[5][0][9]', 'instalaciones[5][0][8][6]', 'complementos.Icaen'}
+        self.assertEqual({item['path'] for item in analysis.audit.losses}, expected)
+        commands = [{'command':'convert','source':str(self.source_path),'template':str(self.template_path)},
+                    {'command':'decision','id':analysis.manifest['pending_plan']['id'],'choice':'omit'}]
+        responses = io.StringIO()
+        c.serve(io.StringIO(''.join(json.dumps(x)+'\n' for x in commands)), responses)
+        preview, result = responses.getvalue().strip('\n').split('\n')
+        self.assertTrue(preview.startswith('DECISION_OMIT\t'))
+        self.assertTrue(result.startswith('REVISAR_CAMBIOS\t'))
+        self.assertIn('CONVERSION_CON_OMISIONES', result)
+        for path in expected:
+            self.assertIn(path, preview)
+            self.assertIn(path, result)
+        self.assertEqual(c.sha(self.source_path), before)
+        self.assertTrue(analysis.output.exists())
+
+    def test_consent_does_not_authorize_modified_source_or_other_option(self):
+        self.solar_fixture()
+        self.src[2][22] = '200'
+        code, analysis = self.run_convert()
+        self.assertEqual(code, 2, analysis.summary)
+        selected = analysis.manifest['pending_plan']['options']['omit']
+        code, result = c.convert(self.source_path, self.template_path, solar_choices={'91':'adapt'},
+                                 consent=selected['token'])
+        self.assertEqual(result.manifest['error_code'], 'E_CONSENT_CHANGED')
+        self.assertFalse(result.output.exists())
+        self.src[2][22] = '201'
+        self.source_path.write_bytes(c.encoded(self.src))
+        code, result = self.accept(analysis)
+        self.assertEqual(result.manifest['error_code'], 'E_CONSENT_CHANGED')
+        self.assertFalse(result.output.exists())
+
+    def test_unknown_field_blocks_even_when_other_losses_are_known(self):
+        self.src[2][22] = '200'
+        measure = self.fixture_measure()
+        measure.state['campo_inesperado'] = {'activo':'dato'}
+        self.src[5] = [measure]
+        code, result = self.run_convert()
+        self.assertEqual(code, 1)
+        self.assertIn('campo_inesperado', result.summary)
+        self.assertNotIn('pending_plan', result.manifest)
+        self.assertFalse(result.output.exists())
+
+    def test_solar_omission_blocks_unrecognized_measure_references(self):
+        self.solar_measure_fixture()
+        retained = self.fixture_measure('Otra mejora')
+        retained.state['datosEdificioOriginal'] = self.src[5][0]
+        self.src[5].append(retained)
+        self.assertFailure('E_MM_REFERENCE')
+
+    def test_unknown_solar_class_cannot_be_omitted(self):
+        generator = self.solar_fixture()
+        generator.cls = c.GlobalRef('models', 'GeneradorNuevo')
+        self.assertFailure('E_SOLAR_SCHEMA')
+
+    def test_unknown_reserved_payload_cannot_be_replaced(self):
+        self.src[14] = 'Información auxiliar de forma desconocida'
+        self.assertFailure('E_RESERVED_BLOCK')
 
 
 if __name__=='__main__':unittest.main(verbosity=2)

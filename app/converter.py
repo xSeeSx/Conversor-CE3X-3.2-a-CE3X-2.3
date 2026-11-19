@@ -3,6 +3,7 @@ No importa clases de CE3X ni ejecuta funciones contenidas en los pickle.
 """
 from __future__ import annotations
 import argparse
+import base64
 import codecs
 import copy
 import datetime as dt
@@ -23,7 +24,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass, field
 
-VERSION = '1.5.1'
+VERSION = '1.5.2'
 ROOT = Path(__file__).resolve().parent
 MAX_BYTES = 64 * 1024 * 1024
 BLOCK_NAMES = ['version', 'administrativos', 'generales', 'envolvente', 'instalaciones',
@@ -274,6 +275,14 @@ def empty(value):
     return value is None or value is False or value == '' or value == []
 
 
+def inactive(value):
+    return value is None or value == '' or isinstance(value, (list, tuple)) and all(inactive(x) for x in value)
+
+
+def scalar(value):
+    return value is None or isinstance(value, (str, int, float, Decimal))
+
+
 def as_num(value, path, minimum=None):
     try:
         require(not isinstance(value, bool), 'E_NUMBER', 'Un booleano no es un numero', path)
@@ -300,8 +309,22 @@ class Audit:
                              'after': json_value(after), 'reason': reason})
         self.event('INFO', code, reason, path=path)
 
-    def omit(self, path, value, reason):
-        self.omitted.append({'path': path, 'value': json_value(value), 'reason': reason})
+    def omit(self, path, value, reason, *, risk='formato', element=None,
+             dependencies='Ninguna referencia nativa retirada', count=1, operation='omitir'):
+        if isinstance(value, CexObject) or isinstance(value, list) and any(isinstance(v, CexObject) for v in value):
+            snapshot = typed_value(value)
+        else:
+            snapshot = json_value(value)
+        self.omitted.append({'path': path, 'value': snapshot, 'reason': reason,
+                             'risk': risk, 'element': element or path, 'dependencies': dependencies,
+                             'count': count, 'operation': operation, 'destination': 'CE3X 2.3'})
+
+    def loss(self, path, value, reason, *, risk='modelo', **details):
+        self.omit(path, value, reason, risk='formato' if inactive(value) else risk, **details)
+
+    @property
+    def losses(self):
+        return [item for item in self.omitted if item['risk'] in ('modelo', 'usuario')]
 
     def log_text(self):
         lines = [f'CE3X Conversor {VERSION}']
@@ -416,8 +439,14 @@ def adapt_systems(source, audit, profile, path_prefix='instalaciones'):
     require(len(source) in (12,14),'E_SYSTEM_GROUPS',f'Numero de grupos no reconocido: {len(source)}')
     if len(source)>12:
         extra=source[12:]
-        audit.omit(path_prefix+'[12:]',extra,'Grupos nuevos de CE3X 3.2 sin equivalente contrastado')
-        require(all(empty(x) for x in extra),'E_NEW_SYSTEM','Hay instalaciones nuevas no compatibles en grupos 12/13',path_prefix+'[12:]')
+        active = [(12+i, x) for i,x in enumerate(extra) if not empty(x)]
+        require(not active, 'E_NEW_SYSTEM',
+                'Grupos de instalaciones sin omision segura: ' + ', '.join(
+                    f'{i} ({len(x) if isinstance(x, list) else 1}): ' + ', '.join(
+                        str(row.state.get('nombre', row.cls.name)) if isinstance(row, CexObject)
+                        else str(row[0]) if isinstance(row, list) and row else type(row).__name__
+                        for row in (x if isinstance(x, list) else [x])) for i,x in active), path_prefix+'[12:]')
+        audit.omit(path_prefix+'[12:]',extra,'Grupos nuevos vacios de CE3X 3.2 sin equivalente contrastado', count=2)
         audit.change('SYSTEM_GROUPS',path_prefix+'.length',len(source),12,'Retirados dos grupos adicionales vacios de 3.2')
     output=copy.deepcopy(source[:12])
     for g,group in enumerate(output):
@@ -442,14 +471,19 @@ def adapt_systems(source, audit, profile, path_prefix='instalaciones'):
                     'E_SYSTEM_TYPE',f'Tipo de instalacion no contrastado: {entry[1]}',p)
             if len(entry)==11:
                 removed=entry.pop(9)
-                require(isinstance(removed,list) and len(removed)==3,'E_SYSTEM_TAIL','Campo adicional de instalacion inesperado',p+'[9]')
-                audit.omit(p+'[9]',removed,'Campo adicional 3.2, sin equivalente en 2.3')
+                require(isinstance(removed,list) and len(removed)==3 and all(scalar(x) for x in removed),
+                        'E_SYSTEM_TAIL','Campo adicional de instalacion inesperado',p+'[9]')
+                audit.loss(p+'[9]',removed,'Tres campos adicionales de instalacion 3.2',
+                           element=str(entry[0]), count=sum(not inactive(x) for x in removed),
+                           dependencies='Rendimiento y cobertura comunes conservados; revisar la instalacion')
                 audit.change('SYSTEM_FIELD',p+'.length',11,10,'Adaptado registro de instalacion al formato nativo 2.3')
             require(isinstance(entry[-1],str),'E_SYSTEM_SUBGROUP','Subgrupo de instalacion no valido',p)
             accumulation=entry[8]
             if isinstance(accumulation,list) and len(accumulation)==7:
                 removed=accumulation.pop()
-                audit.omit(p+'[8][6]',removed,'Campo adicional de acumulacion de CE3X 3.2')
+                require(scalar(removed),'E_SYSTEM_TAIL','Campo adicional de acumulacion desconocido',p+'[8][6]')
+                audit.loss(p+'[8][6]',removed,'Campo adicional de acumulacion ACS 3.2',
+                           element=str(entry[0]), dependencies='Revisar el deposito y su UA')
                 audit.event('WARNING','W_DHW_FIELD','Retirado campo adicional de acumulacion. Revisar el deposito y su UA en CE3X 2.3.',path=p)
                 audit.change('DHW_ACCUMULATION',p+'[8].length',7,6,'Adaptado deposito ACS al formato 2.3')
             if str(entry[6]).startswith('Estimado'):
@@ -466,6 +500,68 @@ MM_SYSTEM_KEYS=['sistemasACSMM','sistemasCalefaccionMM','sistemasRefrigeracionMM
 
 def mm_schema():
     return json.loads((ROOT/'mm_schema_23.json').read_text(encoding='utf-8'))['classes']
+
+
+MM_METADATA = {'ordenPrioridad', 'seRecomienda', 'justificacion'}
+MM_GENERATORS = {'listadoGeneradoresElectricoMM', 'listadoGeneradoresTermosolarMM',
+                 'listadoGeneradoresElectrico', 'listadoGeneradoresTermosolar'}
+MM_MONTHLY_CACHE = {'coeficientesACS', 'coeficientesCal', 'coeficientesIlum',
+                    'coeficientesRef', 'repartoMensualDdaCal', 'repartoMensualDdaRef'}
+MM_LIBRARIES = {
+    'listadoEspacios': 'Espacio', 'listadoMarco': 'Marco', 'listadoVidrio': 'Vidrio',
+    'listadoMateriales': 'Material', 'listadoSombras': 'Sombra',
+    'listadoSistemasConstructivos': 'SistemaConstructivo',
+    'listadoSistemasConstructivosHuecos': 'SistemaConstructivoHueco',
+}
+MM_EMPTY_SYSTEMS = {'listadoBombas', 'listadoIluminacion', 'listadoTorresRefrigeracion',
+                    'listadoVentilacion', 'listadoVentiladores'}
+MM_SYSTEM_EXTRAS = {
+    'datosEdificio.EquipoGeneracion': {'caracteristicaBdC', 'consumoMensual',
+                                       'consumoMensualMedioAmbiente', 'esFicticio', 'servicio'},
+    'datosEdificio.ContribucionesEnergeticas': {'ddaACS', 'generacionMensual', 'consumoMensual',
+                                                'enFinalACS', 'potencia', 'esGenerador'},
+    'datosEdificio.Cerramiento': {'nombreSistemaConstructivo'},
+    'datosEdificio.PuenteTermico': {'modoDeObtencion'},
+}
+MM_RESULT_FIELDS = {'consumoMensual', 'consumoMensualMedioAmbiente', 'generacionMensual',
+                    'ddaACS', 'enFinalACS', 'esFicticio'}
+
+
+def audit_measure_extra(audit, cls, key, value, path, element):
+    if (cls == 'MedidasDeMejora.objetoGrupoMejoras.grupoMedidasMejora'
+            and key in MM_METADATA and scalar(value)):
+        audit.loss(path, value, 'Metadato del conjunto de mejora', risk='usuario', element=element,
+                   dependencies='Se conservan el conjunto, su posicion y sus costes')
+    elif (cls == 'datosEdificio.datosEdificioIniciales' and key in MM_LIBRARIES
+          and isinstance(value, list)
+          and all(isinstance(row, CexObject) and row.cls == GlobalRef('models', MM_LIBRARIES[key])
+                  for row in value)):
+        audit.loss(path, value, 'Biblioteca auxiliar en el modelo calculado de la mejora',
+                   risk='usuario', element=element, count=len(value),
+                   dependencies='Se conserva la envolvente comun; revisar la mejora y recalcular')
+    elif (cls == 'datosEdificio.datosEdificio' and key in MM_MONTHLY_CACHE
+          and isinstance(value, list) and len(value) == 12 and all(scalar(x) for x in value)):
+        audit.omit(path, value, 'Serie mensual de resultados a recalcular', risk='cache', element=element)
+    elif (cls == 'datosEdificio.datosEdificioResultados' and key in ('datosInstCompletoCal', 'datosInstCompletoRef')
+          and isinstance(value, CexObject) and value.cls == GlobalRef('datosEdificio', 'ListadoEquipoGeneracion')):
+        audit.omit(path, value, 'Resultado de instalaciones a recalcular', risk='cache', element=element)
+    elif (key in {'id', 'idEspacio', 'idSistemaConstructivo'}
+          and (cls in MM_SYSTEM_EXTRAS or cls.startswith('Envolvente.objetosEnvolvente.'))
+          and (value is None or isinstance(value, CexObject) and value.cls == GlobalRef('uuid', 'UUID')
+               and set(value.state) == {'int'} and type(value.state['int']) is int)):
+        audit.omit(path, value, 'Identificador interno sin casilla nativa', element=element)
+    elif key in MM_SYSTEM_EXTRAS.get(cls, ()) and (
+            scalar(value) or isinstance(value, list) and all(scalar(x) for x in value)):
+        if key in MM_RESULT_FIELDS:
+            audit.omit(path, value, 'Resultado de la mejora a recalcular', risk='cache', element=element)
+        else:
+            audit.loss(path, value, 'Dato del modelo calculado de la mejora', element=element,
+                       dependencies='Se conservan los campos comunes del modelo; revisar la mejora y recalcular')
+    elif (cls in ('MedidasDeMejora.objetoGrupoMejoras.grupoMedidasMejora', 'datosEdificio.datosEdificioIniciales')
+          and key in MM_GENERATORS | MM_EMPTY_SYSTEMS and empty(value)):
+        audit.omit(path, value, 'Grupo adicional vacio', element=element)
+    else:
+        raise ConversionError('E_MM_FIELD', f'{element}: campo sin omision segura {cls}.{key}', path)
 
 
 def adapt_measure_definitions(definitions,audit,path):
@@ -519,7 +615,7 @@ def convert_measures(measures,economics,profile,audit):
             require(empty(m.state.get(key)),'E_MM_GENERATOR','Generador nuevo sin equivalencia 2.3',p+'.'+key)
     require(len(set(names))==len(names),'E_MM_NAME','Conjuntos con nombres duplicados')
 
-    def project(value,path):
+    def project(value,path,element='Analisis economico'):
         if id(value) in memo:return memo[id(value)]
         if isinstance(value,CexObject):
             cls=value.cls.module+'.'+value.cls.name
@@ -528,12 +624,11 @@ def convert_measures(measures,economics,profile,audit):
             state=dict(value.state)
             keepalive.append(state)
             extras=set(state)-set(schema[cls])
-            if extras:
-                # No serializar grafos ciclicos completos dentro del JSON del log.
-                audit.omit(path+'.campos_32',sorted(extras),'Campos exclusivos 3.2, fuente original intacta')
             if value.cls==group_cls:
-                for key in ('ordenPrioridad','seRecomienda','justificacion'):
-                    if key in state:audit.omit(path+'.'+key,state[key],'Metadato nuevo sin casilla 2.3; orden de lista conservado')
+                element = state['nombre']
+            for key in sorted(extras, key=str):
+                audit_measure_extra(audit, cls, key, state[key], path+'.'+str(key), element)
+            if value.cls==group_cls:
                 require(isinstance(state.get('mejoras'),list) and len(state['mejoras'])==2,
                         'E_MM_DEFINITION','Definicion de conjunto desconocida',path)
                 defs=state['mejoras'];systems=defs[1]
@@ -548,6 +643,7 @@ def convert_measures(measures,economics,profile,audit):
                 state['datosInstalaciones']=adapt_systems(state['datosInstalaciones'],audit,profile,path+'.datosInstalaciones')
             if cls=='datosEdificio.datosEdificio':
                 require(len(state['datosGenerales']) in (21,26),'E_MM_GENERAL','Datos generales de mejora desconocidos',path)
+                audit_general_fields(state['datosGenerales'], audit, path+'.datosGenerales', element)
                 state['datosGenerales']=state['datosGenerales'][:21]
             if cls=='datosEdificio.datosEdificioIniciales':
                 keys=[key[:-2] for key in MM_SYSTEM_KEYS]
@@ -560,20 +656,22 @@ def convert_measures(measures,economics,profile,audit):
                 protection=state.get('elementosProteccionSolar');n=profile['window_solar_fields']
                 require(isinstance(protection,list) and len(protection) in (n,n+3),'E_SOLAR_FIELDS','Proteccion de hueco mejorado desconocida',path)
                 require(all(empty(x) for x in protection[n:]),'E_ACTIVE_SOLAR','Proteccion nueva activa en hueco mejorado',path)
+                if len(protection)>n:
+                    audit.omit(path+'.elementosProteccionSolar[25:]', protection[n:], 'Proteccion nueva inactiva', element=element)
                 state['elementosProteccionSolar']=protection[:n]
             missing=set(required_fields.get(cls,()))-set(state)
             require(not missing,'E_MM_FIELD','Faltan campos nativos: '+str(sorted(missing)),path)
-            result.state={k:project(v,path+'.'+str(k)) for k,v in state.items() if str(k) in schema[cls]}
+            result.state={k:project(v,path+'.'+str(k),element) for k,v in state.items() if str(k) in schema[cls]}
             return result
         if isinstance(value,list):
             result=[];memo[id(value)]=result
-            result.extend(project(v,f'{path}[{i}]') for i,v in enumerate(value));return result
+            result.extend(project(v,f'{path}[{i}]',element) for i,v in enumerate(value));return result
         if isinstance(value,dict):
             result={};memo[id(value)]=result
-            for k,v in value.items():result[project(k,path+'.key')]=project(v,path+'.'+str(k))
+            for k,v in value.items():result[project(k,path+'.key',element)]=project(v,path+'.'+str(k),element)
             return result
         if isinstance(value,tuple):
-            values=[project(v,f'{path}[{i}]') for i,v in enumerate(value)]
+            values=[project(v,f'{path}[{i}]',element) for i,v in enumerate(value)]
             if id(value) not in memo:memo[id(value)]=tuple(values)
             return memo[id(value)]
         require(not isinstance(value,GlobalRef),'E_MM_GLOBAL','Referencia global suelta en medidas',path)
@@ -588,13 +686,22 @@ def convert_measures(measures,economics,profile,audit):
 
 SOLAR_MONTHS = ('enero','febrero','marzo','abril','mayo','junio',
                 'julio','agosto','septiembre','octubre','noviembre','diciembre')
+SOLAR_FIELDS = set(SOLAR_MONTHS) | {'nombre','zona','potencia','id','servicio','tipo','consumoMensual'}
 
 
 def solar_key(generator):
-    require(isinstance(generator,CexObject),'E_SOLAR_SCHEMA','Generador solar desconocido')
+    require(isinstance(generator,CexObject) and generator.cls == GlobalRef('models','GeneradorTermosolar'),
+            'E_SOLAR_SCHEMA','Clase de generador solar desconocida')
+    state = generator.state
+    require(set(state) <= SOLAR_FIELDS and set(SOLAR_MONTHS) | {'nombre', 'zona', 'potencia'} <= set(state)
+            and all(scalar(state[k]) for k in set(state) - {'id', 'consumoMensual'})
+            and (state.get('consumoMensual') is None or isinstance(state['consumoMensual'], list)
+                 and all(scalar(x) for x in state['consumoMensual'])),
+            'E_SOLAR_SCHEMA', 'Campos de generador solar desconocidos: '+str(state.get('nombre', '')))
     ident=generator.state.get('id')
-    if isinstance(ident,CexObject) and isinstance(ident.state.get('int'),int):
+    if isinstance(ident,CexObject) and ident.cls == GlobalRef('uuid','UUID') and type(ident.state.get('int')) is int:
         return str(ident.state['int'])
+    require(ident is None, 'E_SOLAR_SCHEMA', 'Identificador de generador solar desconocido')
     return hashlib.sha256(json_text(json_value(generator)).encode('utf-8')).hexdigest()
 
 
@@ -605,8 +712,7 @@ def solar_candidate(generators, systems, general, envelope_changes=False):
         g=generators[0]
         require(g.cls==GlobalRef('models','GeneradorTermosolar'),'E_SOLAR_SCOPE','Clase solar no validada')
         s=g.state
-        known=set(SOLAR_MONTHS)|{'nombre','zona','potencia','id','servicio','tipo','consumoMensual'}
-        require(not set(s)-known,'E_SOLAR_SCOPE','Campos solares nuevos no validados')
+        require(not set(s)-SOLAR_FIELDS,'E_SOLAR_SCOPE','Campos solares nuevos no validados')
         require(s.get('servicio') in (None,'ACS') and s.get('tipo') in (None,'Otro'),
                 'E_SOLAR_SCOPE','Servicio o tipo solar no validado')
         require(s.get('zona')=='Edificio Objeto','E_SOLAR_SCOPE','Solar asignada a una zona no validada')
@@ -658,8 +764,7 @@ def window_protection_issues(source):
     if not indices:return []
     require(not source[5],'E_ACTIVE_SOLAR','Protecciones nuevas con medidas de mejora: falta contrastar sus copias y referencias')
     active=sum(source[3][1][i].state['tieneProteccionSolar'] for i in indices)
-    names=', '.join(str(source[3][1][i].state.get('descripcion',i+1))[:100] for i in indices[:6])
-    if len(indices)>6:names+=f' y {len(indices)-6} mas'
+    names=', '.join(str(source[3][1][i].state.get('descripcion',i+1)) for i in indices)
     return [{'id':'window-protection:building','kind':'window_protection','name':'Protecciones solares nuevas en huecos',
              'context':'edificio','candidate':None,'window_indices':indices,
              'message':f'{len(indices)} huecos tienen configuracion adicional de proteccion solar 3.2 ({active} con la proteccion activada): '+names+'. '
@@ -672,17 +777,22 @@ def window_protection_issues(source):
 
 def solar_issues(source):
     issues=window_protection_issues(source)
-    contexts=[('edificio',source[4],source[2],False)]
+    contexts=[('edificio',source[4],source[2],False,None)]
     for i,m in enumerate(source[5]):
         if not isinstance(m,CexObject):continue
         defs=m.state.get('mejoras')
         if isinstance(defs,list) and len(defs)==2 and isinstance(defs[1],list) and len(defs[1])==3:
-            contexts.append((f'mejora {i+1}: '+str(m.state.get('nombre','')),defs[1][1],source[2],bool(defs[0])))
-    for context,systems,general,changed in contexts:
+            contexts.append((f'mejora {i+1}: '+str(m.state.get('nombre','')),defs[1][1],source[2],bool(defs[0]),i))
+    for context,systems,general,changed,index in contexts:
         if not isinstance(systems,list) or len(systems)!=14 or not systems[12]:continue
+        require(isinstance(systems[12],list),'E_SOLAR_SCHEMA','Grupo termosolar desconocido',context)
+        require(index is not None or not source[5], 'E_SOLAR_SCHEMA',
+                'Termosolar del edificio con mejoras: dependencias sin contraste', context)
+        if index is not None:
+            copies = source[5][index].state.get('listadoGeneradoresTermosolarMM')
+            require(isinstance(copies, list) and typed_value(copies) == typed_value(systems[12]),
+                    'E_SOLAR_SCHEMA','Copias de los generadores de la mejora no coinciden',context)
         candidate,reason=solar_candidate(systems[12],systems,general,changed)
-        if context=='edificio' and source[5]:
-            candidate,reason=None,'Solar del edificio combinada con mejoras: configuracion aun no ensayada'
         for generator in systems[12]:
             key=solar_key(generator)
             require(all(item['id']!=key for item in issues),'E_SOLAR_SCHEMA',
@@ -697,12 +807,56 @@ def solar_issues(source):
             desc+=('Omitir elimina esta instalacion solar de la salida. ' if context=='edificio' else
                    'Omitir elimina TODO este conjunto de mejora, incluidos sus costes y otras actuaciones. ')
             desc+='Revisar y recalcular en CE3X 2.3. El original se conserva.'
-            issues.append({'id':key,'name':name,'context':context,'candidate':candidate,'message':desc})
+            issues.append({'id':key,'name':name,'context':context,'candidate':candidate,'message':desc,
+                           'measure_index':index,'signature':typed_value(generator)})
     return issues
 
 
-def resolve_solar(source, choices, audit, manifest):
-    issues=solar_issues(source)
+def remove_solar_measures(blocks, indices, audit):
+    group_cls = GlobalRef('MedidasDeMejora.objetoGrupoMejoras', 'grupoMedidasMejora')
+    names = [m.state.get('nombre') for m in blocks[5] if isinstance(m, CexObject) and m.cls == group_cls]
+    require(len(names) == len(blocks[5]) and all(isinstance(n, str) and n for n in names)
+            and len(set(names)) == len(names), 'E_MM_NAME', 'Dependencias de conjuntos no identificables')
+    removed = {names[i] for i in indices}
+    objects = {id(blocks[5][i]) for i in indices}
+    require(len(blocks[6]) == 4 and isinstance(blocks[6][2], list)
+            and all(isinstance(row, list) and len(row) == 6 and isinstance(row[1], str) and all(scalar(x) for x in row)
+                    for row in blocks[6][2]), 'E_ECONOMIC', 'Referencias de costes desconocidas')
+    require(len(blocks[11]) in (0, 7, 8) and all(isinstance(x, str) for x in blocks[11][:3]),
+            'E_REPORT_FIELDS', 'Referencias de informe desconocidas')
+    for i in sorted(indices):
+        name = names[i]
+        costs = [row for row in blocks[6][2] if row[1] == name]
+        report_slots = [j for j, value in enumerate(blocks[11][:3]) if value == name]
+        audit.omit(f'medidas_mejora[{i}]', {'conjunto': name, 'costes': costs, 'informe': report_slots},
+                   'Conjunto completo, incluidas todas sus actuaciones y costes', risk='modelo', element=name,
+                   dependencies=f'{len(costs)} filas de costes y {len(report_slots)} selecciones del informe retiradas')
+    blocks[5] = [m for i, m in enumerate(blocks[5]) if i not in indices]
+    blocks[6][2] = [row for row in blocks[6][2] if row[1] not in removed]
+    blocks[11][:3] = ['' if x in removed else x for x in blocks[11][:3]]
+
+    seen = set()
+    def verify(value, path):
+        require(id(value) not in objects and not (isinstance(value, str) and value in removed),
+                'E_MM_REFERENCE', 'Referencia adicional a un conjunto que se retiraria', path)
+        if isinstance(value, (list, tuple, dict, CexObject)):
+            if id(value) in seen:
+                return
+            seen.add(id(value))
+        if isinstance(value, CexObject):
+            verify(value.state, path)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                verify(key, path+'.clave')
+                verify(item, path+'.'+str(key))
+        elif isinstance(value, (list, tuple)):
+            for i, item in enumerate(value):
+                verify(item, f'{path}[{i}]')
+    for i in range(1, 13):
+        verify(blocks[i], f'blocks[{i}]')
+
+
+def resolve_solar(source, choices, audit, manifest, issues, profile):
     choices=choices or {}
     known={item['id']:item for item in issues}
     require(not set(choices)-set(known),'E_SOLAR_DECISION','La seleccion ya no coincide con el archivo')
@@ -732,84 +886,104 @@ def resolve_solar(source, choices, audit, manifest):
         return [item['name']+' (adaptado 2.3)',LegacyString('Contribuciones energéticas'),
                 [format(item['candidate']['percent'],'.12g'),'0','0',False],['']*6,[True,False],'Edificio Objeto']
     added=set()
-    def contributions(rows,generators):
+    def contributions(rows,generators,measure_index):
+        require(isinstance(rows, list) and isinstance(generators, list), 'E_SOLAR_SCHEMA',
+                'Grupos de contribuciones o generadores de forma desconocida')
         for g in generators:
             key=solar_key(g)
             require(key in known,'E_SOLAR_SCHEMA','Generador almacenado sin declaracion coincidente')
             item=known[key]
+            require(item['measure_index'] == measure_index, 'E_MM_REFERENCE',
+                    'Generador termosolar compartido con un contexto distinto', item['context'])
+            require(typed_value(g) == item['signature'], 'E_SOLAR_SCHEMA',
+                    'Copia de generador termosolar con valores distintos', item['context'])
             if choices[key]=='adapt' and (id(rows),key) not in added:
                 new=row(item)
                 require(all(r[0]!=new[0] for r in rows),'E_SOLAR_SCHEMA','Nombre de contribucion duplicado')
                 rows.append(new);added.add((id(rows),key))
-    def matrix(systems):
+    def matrix(systems,measure_index):
         if isinstance(systems,list) and len(systems)==14 and systems[12]:
-            contributions(systems[6],systems[12]);systems[12]=[]
+            contributions(systems[6],systems[12],measure_index);systems[12]=[]
     # Omission of a measure is explicit and includes its dependent report/cost references.
-    removed=[];kept=[]
-    for m in out[5]:
-        generators=m.state.get('listadoGeneradoresTermosolarMM',[])
-        if any(choices.get(solar_key(g))=='omit' for g in generators):removed.append(m.state['nombre'])
-        else:kept.append(m)
-    out[5]=kept
-    if removed:
-        require(isinstance(out[6],list) and len(out[6])==4,'E_ECONOMIC','Analisis economico desconocido')
-        out[6][2]=[r for r in out[6][2] if len(r)<2 or r[1] not in removed]
-        out[11]=['' if isinstance(v,str) and v in removed else v for v in out[11]]
-    seen=set()
-    def visit(value):
+    removed_indices = {issue['measure_index'] for issue in issues
+                       if issue.get('measure_index') is not None and choices[issue['id']]=='omit'}
+    def visit(value, measure_index, seen):
         if id(value) in seen:return
         if isinstance(value,(CexObject,list,dict,tuple)):seen.add(id(value))
         if isinstance(value,CexObject):
             state=value.state
-            if 'datosInstalaciones' in state:matrix(state['datosInstalaciones'])
+            if 'datosInstalaciones' in state:matrix(state['datosInstalaciones'],measure_index)
             if value.cls==GlobalRef('MedidasDeMejora.objetoGrupoMejoras','grupoMedidasMejora'):
-                matrix(state['mejoras'][1][1])
+                require(value is out[5][measure_index], 'E_MM_REFERENCE',
+                        'Un conjunto de mejora referencia otro conjunto')
+                matrix(state['mejoras'][1][1],measure_index)
                 generators=state.get('listadoGeneradoresTermosolarMM',[])
-                if generators:contributions(state['sistemasContribucionesMM'],generators);state['listadoGeneradoresTermosolarMM']=[]
+                if generators:contributions(state['sistemasContribucionesMM'],generators,measure_index);state['listadoGeneradoresTermosolarMM']=[]
             if 'listadoGeneradoresTermosolar' in state and state['listadoGeneradoresTermosolar']:
-                contributions(state['sistemasContribuciones'],state['listadoGeneradoresTermosolar'])
+                contributions(state['sistemasContribuciones'],state['listadoGeneradoresTermosolar'],measure_index)
                 state['listadoGeneradoresTermosolar']=[]
-            for val in list(state.values()):visit(val)
+            for val in state.values():visit(val, measure_index, seen)
         elif isinstance(value,dict):
-            for val in list(value.values()):visit(val)
+            for val in value.values():visit(val, measure_index, seen)
         elif isinstance(value,(list,tuple)):
-            for val in list(value):visit(val)
-    matrix(out[4]);visit(out)
+            for val in value:visit(val, measure_index, seen)
+    matrix(out[4],None)
+    for i, measure in enumerate(out[5]):
+        visit(measure, i, set())
+    if removed_indices:
+        # A whole-group decision still requires a recognized group and graph.
+        convert_measures([out[5][i] for i in sorted(removed_indices)], [], profile, Audit())
+        remove_solar_measures(out, removed_indices, audit)
     for issue in issues:
         choice=choices[issue['id']]
-        audit.omit(issue['context']+'.solar',issue,'Decision explicita: '+choice)
+        audit.omit(issue['context']+'.solar', issue,
+                   'Proteccion solar nueva' if issue.get('kind') == 'window_protection' else 'Instalacion termosolar mensual',
+                   risk='modelo', operation='adaptar' if choice=='adapt' else 'omitir',
+                   element=issue['name'], count=len(issue.get('window_indices',[None])),
+                   dependencies=issue['message'])
         audit.event('WARNING','W_SOLAR_'+choice.upper(),issue['message'],choice=choice)
     manifest['results_require_recalculation']=True
     return out
+
+
+def audit_general_fields(values, audit, path, element):
+    extra = values[21:]
+    require(all(scalar(x) for x in extra), 'E_NEW_GENERAL',
+            'Campos nuevos con estructura no reconocida', path+'[21:]')
+    if len(values) > 22 and not empty(values[22]):
+        as_num(values[22], path+'[22]', minimum=0)
+    for i, value in enumerate(extra, 21):
+        audit.loss(f'{path}[{i}]', value, 'Campo general exclusivo de CE3X 3.2',
+                   element=element, dependencies='Se conservan los datos generales comunes y su superficie')
 
 
 def transfer(source, template, profile, audit, fix_accents=True):
     audit.stage='adaptar estructuras'
     require(len(source[1])==29 and len(source[2])==26, 'E_SOURCE_SCHEMA',
             'El perfil 3.2 espera 29 campos administrativos y 26 generales')
-    if any(not empty(x) for x in source[2][21:]):
-        require(all(isinstance(x,(str,bool,int,float)) or x is None for x in source[2][21:]),
-                'E_NEW_GENERAL', 'Campos nuevos con estructura no reconocida', 'generales[21:]')
-        # Los ejemplos oficiales 3.2 usan superficies distintas en [6] y [22].
-        # [22] no tiene una equivalencia contrastada en 2.3: conservar [6] y
-        # registrar el campo adicional, sin exigir una igualdad inexistente.
-        if not empty(source[2][22]):
-            as_num(source[2][22], 'generales[22]', minimum=0)
-        audit.event('WARNING','W_GENERAL_32',
-                    'Campos generales exclusivos 3.2 sin casilla en 2.3: registrados en datos_no_transferidos.json. Revisar datos generales al abrir.',
-                    path='generales[21:]', values=json_value(source[2][21:]))
+    audit_general_fields(source[2], audit, 'generales', 'Edificio')
+    for i, value in enumerate(source[1][26:], 26):
+        require(scalar(value) or i == 27 and isinstance(value, list) and all(scalar(x) for x in value),
+                'E_ADMIN_FIELD', 'Campo administrativo adicional con estructura desconocida', f'administrativos[{i}]')
+        audit.loss(f'administrativos[{i}]', value, 'Campo administrativo exclusivo de CE3X 3.2',
+                   risk='usuario', element='Datos administrativos',
+                   dependencies='Se conservan los campos administrativos comunes')
     out=copy.deepcopy(source)
     out[0]=copy.deepcopy(template[0])
     audit.change('HEADER','version',source[0],out[0],'Cabecera nativa 2.3 de la plantilla')
     for index,count in ((1,26),(2,21)):
-        audit.omit(f'blocks[{index}][{count}:]',source[index][count:],'Campos adicionales 3.2')
         out[index]=copy.deepcopy(source[index][:count])
         audit.change('FIELDS_23',f'blocks[{index}].length',len(source[index]),count,'Longitud nativa 2.3; valores comunes del origen conservados')
+    schema = mm_schema()
     for i,w in enumerate(out[3][1]):
         require(isinstance(w,CexObject),'E_WINDOW_CLASS','Registro de hueco invalido',f'huecos[{i}]')
+        cls = w.cls.module+'.'+w.cls.name
+        unknown = set(w.state) - set(schema[cls]) - set(profile['window_removed_attributes'])
+        require(not unknown, 'E_WINDOW_FIELD', f'{w.state["descripcion"]}: campos de hueco desconocidos {sorted(unknown, key=str)}',
+                f'huecos[{i}]')
         for key in profile['window_removed_attributes']:
             if key in w.state:
-                audit.omit(f'huecos[{i}].{key}',w.state.pop(key),'Identificador UUID 3.2')
+                audit_measure_extra(audit, cls, key, w.state.pop(key),f'huecos[{i}].{key}',w.state['descripcion'])
                 audit.change('REMOVE_UUID',f'huecos[{i}].{key}','presente','retirado','Retirado identificador de la version nueva')
         protection=w.state.get('elementosProteccionSolar')
         n=profile['window_solar_fields']
@@ -830,11 +1004,27 @@ def transfer(source, template, profile, audit, fix_accents=True):
         audit.omit('informe[7]',out[11][7],'Campo adicional vacio de 3.2')
         out[11]=out[11][:7]
         audit.change('REPORT_FIELDS','informe.length',8,7,'Retirado campo adicional vacio de informe 3.2')
-    audit.omit('complementos',list(source[12]),'Configuraciones/resultados de complementos a regenerar')
+    for name, payload in source[12].items():
+        require(isinstance(name, str) and name and scalar(payload),
+                'E_ADDON_SCHEMA', 'Complemento con estructura sin omision segura: '+str(name), 'complementos')
+        audit.omit('complementos.'+name, payload, 'Entrada del bloque de complementos',
+                   risk='usuario', element=name, operation='reiniciar',
+                   dependencies='Regenerar el complemento en CE3X 2.3')
     out[12]={}
-    audit.change('RESET_ADDONS','blocks[12]','configuracion de complementos','reiniciada','Regenerar complementos en CE3X 2.3')
+    if source[12]:
+        audit.change('RESET_ADDONS','blocks[12]','configuracion de complementos','reiniciada','Regenerar complementos en CE3X 2.3')
     # Dos bloques reservados observados en ficheros nativos. No se interpretan.
-    out[13:15]=copy.deepcopy(template[13:15])
+    for i in (13,14):
+        old, new = source[i], template[i]
+        if typed_value(old) == typed_value(new):
+            continue
+        token = lambda value: (isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9+/]{43}=', value)
+                               and len(base64.b64decode(value, validate=True)) == 32)
+        require(i == 14 and token(old) and token(new), 'E_RESERVED_BLOCK',
+                'Bloque reservado con forma desconocida', f'blocks[{i}]')
+        audit.omit(f'blocks[{i}]', old, 'Token interno de 32 bytes sustituido por el de la plantilla',
+                   operation='sustituir')
+        out[i] = copy.deepcopy(new)
     audit.event('WARNING','W_RESERVED_BLOCKS','Bloques reservados 13/14 conservados de la plantilla nativa; significado interno no verificado.')
     audit.event('WARNING','W_RECALCULATE','El destino requiere apertura, revision y recalculo en CE3X 2.3. No certifica HE0/HE1.')
     return out
@@ -988,7 +1178,32 @@ def publish_file(temporary, destination, overwrite=False):
         temporary.unlink()
 
 
-def convert(source, template, profile_path=None, fix_accents=True, overwrite=False, solar_choices=None, expected_source_sha=None):
+def prepare_destination(source, native, profile, audit, manifest, issues, choices, fix_accents):
+    audit.stage = 'planificar conversion'
+    resolved = resolve_solar(source, choices, audit, manifest, issues, profile)
+    target = transfer(resolved, native, profile, audit, fix_accents)
+    validate(target, audit, profile, target=True)
+    check_preservation(resolved, target, fix_accents)
+    compare_windows(resolved, target, profile)
+    validate_target_classes(target)
+    return target
+
+
+def consent_token(manifest, choices, losses):
+    scope = [manifest[key] for key in ('source_sha256', 'template_sha256', 'profile_sha256',
+                                       'improvements_schema_sha256')]
+    return hashlib.sha256(json_text([VERSION, scope, sorted(choices.items()), losses]).encode('utf-8')).hexdigest()
+
+
+def describe_losses(losses):
+    return '\n'.join(
+        f"- {item['risk'].capitalize()} | {item['element']} | {item['count']} | "
+        f"{item['operation'].capitalize()} {item['reason']} ({item['path']}). {item['dependencies']}."
+        for item in losses)
+
+
+def convert(source, template, profile_path=None, fix_accents=True, overwrite=False, solar_choices=None,
+            expected_source_sha=None, consent=None):
     source, template = Path(source).resolve(), Path(template).resolve()
     destination = output_path(source)
     audit = Audit()
@@ -1034,12 +1249,43 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
         src = repair_text(src, audit, 'blocks')
         validate(src, audit, profile)
         require(sha(source)==manifest['source_sha256'],'E_INPUT_CHANGED','El origen ha cambiado durante la lectura')
-        src = resolve_solar(src, solar_choices, audit, manifest)
-        dst = transfer(src, native, profile, audit, fix_accents)
-        validate(dst, audit, profile, target=True)
-        check_preservation(src, dst, fix_accents)
-        compare_windows(src, dst, profile)
-        validate_target_classes(dst)
+        issues = solar_issues(src)
+        requested = solar_choices or {}
+        require(not set(requested) - {issue['id'] for issue in issues}, 'E_SOLAR_DECISION',
+                'La seleccion ya no coincide con el archivo')
+        undecided = [issue for issue in issues if issue['id'] not in requested]
+        choices = {issue['id']: requested.get(issue['id'], 'omit') for issue in issues}
+        dst = prepare_destination(src, native, profile, audit, manifest, issues, choices, fix_accents)
+        token = consent_token(manifest, choices, audit.losses)
+        require(consent is None or not undecided and consent == token and audit.losses,
+                'E_CONSENT_CHANGED', 'El plan autorizado no coincide. Vuelve a analizar el archivo.')
+        if audit.losses and consent is None:
+            first_option = 'apply' if 'adapt' in choices.values() else 'omit'
+            options = {first_option: {'token': token, 'choices': choices, 'losses': audit.losses}}
+            adapt_choices = {**choices, **{issue['id']: 'adapt' for issue in undecided if issue['candidate']}}
+            if adapt_choices != choices:
+                adapt_audit = Audit()
+                try:
+                    prepare_destination(src, native, profile, adapt_audit, {}, issues, adapt_choices, fix_accents)
+                except ConversionError as exc:
+                    audit.event('WARNING', 'W_ADAPT_BLOCKED', str(exc), path=exc.path)
+                else:
+                    options['adapt'] = {'token': consent_token(manifest, adapt_choices, adapt_audit.losses),
+                                        'choices': adapt_choices, 'losses': adapt_audit.losses}
+            title = 'Omitir lo indicado y convertir' if first_option == 'omit' else 'Aplicar las decisiones indicadas'
+            message = title + '\n' + describe_losses(audit.losses)
+            if 'adapt' in options:
+                message += '\n\nAdaptar y convertir (incluye estas perdidas)\n' + describe_losses(options['adapt']['losses'])
+            message += '\n\nEl certificado puede cambiar. Revisa y recalcula en CE3X 2.3. Cancelar conserva todos los archivos.'
+            issue_id = issues[0]['id'] if len(issues) == 1 else 'plan:'+token[:16]
+            manifest['pending_plan'] = {'id': issue_id, 'options': options}
+            if undecided:
+                manifest['pending_solar'] = undecided[0]
+            manifest.pop('solar_decisions', None)
+            raise ConversionError('E_SOLAR_DECISION' if undecided else 'E_CONSENT_REQUIRED', message, issue_id)
+        if audit.losses:
+            manifest['consent'] = {'token': token, 'solar_choices': choices}
+            manifest['results_require_recalculation'] = True
         attempt.artifacts['modelo_destino_tecnico.json'] = json_text(technical_snapshot(dst))
         audit.stage = 'escribir y releer'
         with tempfile.NamedTemporaryFile(prefix='.ce3x_conversion_', suffix='.partial',
@@ -1062,26 +1308,32 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
                         improvement_count=len(dst[5]), improvement_names=[m.state['nombre'] for m in dst[5]],
                         cached_results_origin_version='3.2', target_results_recalculated=False)
         audit.event('INFO', 'ROUNDTRIP_OK', '15 bloques releidos; clases, acentos, valores y tipos conservados')
-        status, exit_code = 'REVISAR', 0
+        status, exit_code = ('CONVERSION_CON_OMISIONES' if audit.losses else 'REVISAR'), 0
         if manifest.get('solar_decisions'):
             actions=['Adaptado: '+x['name'] if x['choice']=='adapt' else 'Omitido: '+x['context']+' / '+x['name'] for x in manifest['solar_decisions']]
             manifest['decision_summary']='; '.join(actions)
         attempt.summary = (f'Archivo generado. {len(dst[3][0])} cerramientos, {len(dst[3][1])} huecos, '
                            f'{len(dst[3][2])} puentes y {len(dst[5])} conjuntos de mejora. '
                            'Revisar y recalcular en CE3X 2.3.')
+        if audit.losses:
+            decisions = manifest.get('decision_summary', '')
+            manifest['decision_summary'] = ('CONVERSION_CON_OMISIONES\n' + decisions + '\n'
+                                            + describe_losses(audit.losses)
+                                            + '\nRevisar y recalcular en CE3X 2.3.')
     except Exception as exc:
         code, path = (exc.code, exc.path) if isinstance(exc, ConversionError) else ('E_UNEXPECTED', '')
         audit.event('ERROR', code, str(exc), path=path, exception_type=type(exc).__name__)
         attempt.traceback_text = traceback.format_exc()
-        if code=='E_SOLAR_DECISION' and 'pending_solar' in manifest:
+        if 'pending_plan' in manifest:
             status, exit_code='DECISION',2
         manifest.update(structural_validation=False, error_code=code, error_path=path,
                         error_message=str(exc), error_stage=audit.stage)
-        attempt.summary = code + ': ' + str(exc)
+        attempt.summary = (code + ': ' + str(exc)) if status=='DECISION' or not path else f'{code} [{path}]: {exc}'
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-        manifest.update(status=status, finished=dt.datetime.now().astimezone().isoformat())
+        manifest.update(status=status, finished=dt.datetime.now().astimezone().isoformat(),
+                        plan_de_conversion={'transformaciones': audit.changes, 'no_transferido': audit.omitted})
     return exit_code, attempt
 
 
@@ -1091,9 +1343,16 @@ def serve(stream_in=None, stream_out=None):
     last_attempt = None
     pending = None
     def reply(status, path, message):
-        clean = lambda text: str(text).replace('\t', ' ').replace('\r', ' ').replace('\n', ' ')
-        stream_out.write('\t'.join(map(clean, (status, path, message))) + '\n')
+        clean = lambda value: str(value).translate({0: ' ', 9: ' ', 13: '', 30: ' ', 31: ' '})
+        line = '\t'.join((status, clean(path).replace('\n', ' '), clean(message).replace('\n', '\x1e\x1f'))) + '\n'
+        fits = len(line.encode('utf-8')) < 131072
+        if not fits:
+            status = ('ERROR' if status.startswith('DECISION_') else status)
+            prefix = 'CONVERSION_CON_OMISIONES. ' if status == 'REVISAR_CAMBIOS' else ''
+            line = f'{status}\t{clean(path) if status != "ERROR" else ""}\t{prefix}El inventario completo excede la vista. Guarda el diagnostico para consultarlo.\n'
+        stream_out.write(line)
         stream_out.flush()
+        return fits
     for line in stream_in:
         try:
             request = json.loads(line)
@@ -1102,30 +1361,36 @@ def serve(stream_in=None, stream_out=None):
                 return
             if command in ('convert','decision'):
                 if command=='convert':
-                    pending=dict(request,solar_choices={})
+                    last_attempt=None
+                    pending=dict(request)
                     pending['source_sha']=sha(Path(request['source']))
+                    selected = {'choices': {}, 'token': None}
                 else:
                     require(pending is not None and last_attempt is not None,'E_RUN','No hay una decision pendiente')
-                    issue=last_attempt.manifest.get('pending_solar')
-                    require(issue is not None and request.get('id')==issue['id'],'E_SOLAR_DECISION','Decision caducada')
+                    plan=last_attempt.manifest.get('pending_plan')
+                    require(plan is not None and request.get('id')==plan['id'],'E_SOLAR_DECISION','Decision caducada')
                     if request.get('choice')=='cancel':
-                        pending=None;last_attempt=None
+                        pending=None
+                        last_attempt.manifest['status'] = 'CANCELADO'
                         reply('CANCELADO','','Conversion cancelada. No se ha generado ningun archivo.')
                         continue
-                    require(request.get('choice') in ('adapt','omit'),'E_SOLAR_DECISION','Seleccion desconocida')
-                    pending['solar_choices'][issue['id']]=request['choice']
+                    selected=plan['options'].get(request.get('choice'))
+                    require(selected is not None,'E_SOLAR_DECISION','Seleccion no disponible')
                 code,last_attempt=convert(pending['source'],pending.get('template',ROOT/'plantilla_23.cex'),
                                           overwrite=pending.get('overwrite',False),
-                                          solar_choices=pending['solar_choices'],expected_source_sha=pending['source_sha'])
+                                          solar_choices=selected['choices'],expected_source_sha=pending['source_sha'],
+                                          consent=selected['token'])
                 if code==2:
-                    issue=last_attempt.manifest['pending_solar']
-                    reply('DECISION_ADAPT' if issue['candidate'] else 'DECISION_OMIT',issue['id'],issue['message'])
+                    plan=last_attempt.manifest['pending_plan']
+                    if not reply('DECISION_ADAPT' if 'adapt' in plan['options'] else 'DECISION_OMIT',
+                                 plan['id'],last_attempt.manifest['error_message']):
+                        pending=None
                 else:
                     status=last_attempt.manifest['status']
                     message=last_attempt.summary
-                    if not code and last_attempt.manifest.get('solar_decisions'):
+                    if status == 'CONVERSION_CON_OMISIONES':
                         status='REVISAR_CAMBIOS'
-                        message=last_attempt.manifest['decision_summary']+'. Revisar y recalcular en CE3X 2.3 antes de usar los resultados.'
+                        message=last_attempt.manifest['decision_summary']
                     reply(status,last_attempt.output if not code else '',message)
                     pending=None
             elif command == 'diagnostic':
@@ -1170,6 +1435,7 @@ def main(argv=None):
     p.add_argument('--profile')
     p.add_argument('--overwrite', action='store_true', help='Sustituir expresamente una salida existente')
     p.add_argument('--solar-choice', action='append', default=[], metavar='ID=adapt|omit', help='Decision explicita para cada generador indicado por el analisis previo')
+    p.add_argument('--consent', metavar='TOKEN', help='Autorizar el plan exacto mostrado en el analisis previo')
     p.add_argument('--diagnostic', help='Guardar un ZIP de diagnostico expresamente en esta ruta')
     p.add_argument('--fix-accents', action='store_true', default=True, help=argparse.SUPPRESS)
     sub.add_parser('self-test')
@@ -1183,11 +1449,13 @@ def main(argv=None):
             serve()
             return 0
         choices=dict(item.split('=',1) for item in a.solar_choice)
-        code, attempt = convert(a.source, a.template, a.profile, a.fix_accents, a.overwrite, solar_choices=choices)
+        code, attempt = convert(a.source, a.template, a.profile, a.fix_accents, a.overwrite,
+                                solar_choices=choices, consent=a.consent)
         print(attempt.summary)
         if code==2:
-            issue=attempt.manifest['pending_solar']
-            print('ID: '+issue['id']+'; adaptar disponible: '+str(issue['candidate'] is not None))
+            for option, plan in attempt.manifest['pending_plan']['options'].items():
+                flags = ' '.join(f'--solar-choice {key}={value}' for key, value in plan['choices'].items())
+                print(f'{option}: {flags} --consent {plan["token"]}')
         if not code:
             print(attempt.output)
             if attempt.manifest.get('decision_summary'):print(attempt.manifest['decision_summary'])

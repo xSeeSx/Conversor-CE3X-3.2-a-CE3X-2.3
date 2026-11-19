@@ -177,24 +177,27 @@ static LRESULT CALLBACK DecisionProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
     if (msg == WM_CLOSE) { decisionResult = IDCANCEL; DestroyWindow(hwnd); return 0; }
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
-static int solarDecision(const WCHAR *message, int canAdapt) {
+static int conversionDecision(const WCHAR *message, int canAdapt) {
     WNDCLASSW wc = {0}; wc.lpfnWndProc = DecisionProc; wc.hInstance = GetModuleHandleW(NULL);
-    wc.lpszClassName = L"CE3XSolarDecision"; wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.lpszClassName = L"CE3XConversionDecision"; wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1); RegisterClassW(&wc);
     RECT parent; GetWindowRect(window, &parent); decisionResult = IDCANCEL;
     HWND dialog = CreateWindowExW(WS_EX_DLGMODALFRAME, wc.lpszClassName,
         L"Datos sin equivalencia directa en CE3X 2.3", WS_POPUP | WS_CAPTION | WS_SYSMENU,
         parent.left + 20, parent.top + 20, 700, 290, window, NULL, wc.hInstance, NULL);
     if (!dialog) return IDCANCEL;
-    HWND body = CreateWindowExW(0, L"EDIT", message, WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
+    HWND body = CreateWindowExW(0, L"EDIT", message, WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
         20, 18, 650, 165, dialog, NULL, wc.hInstance, NULL);
     SendMessageW(body, WM_SETFONT, (WPARAM)font, TRUE);
-    HWND adapt = CreateWindowExW(0,L"BUTTON",L"Adaptar a 2.3",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+    HWND adapt = CreateWindowExW(0,L"BUTTON",L"Adaptar y convertir",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
         20,205,190,36,dialog,(HMENU)501,wc.hInstance,NULL);
-    HWND omit = CreateWindowExW(0,L"BUTTON",L"Omitir lo indicado",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+    HWND omit = CreateWindowExW(0,L"BUTTON",L"Omitir lo indicado y convertir",WS_CHILD | WS_VISIBLE | WS_TABSTOP,
         225,205,230,36,dialog,(HMENU)502,wc.hInstance,NULL);
     HWND cancel = CreateWindowExW(0,L"BUTTON",L"Cancelar",WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
         470,205,200,36,dialog,(HMENU)IDCANCEL,wc.hInstance,NULL);
+    if (!body || !adapt || !omit || !cancel || GetWindowTextLengthW(body) != wcslen(message)) {
+        DestroyWindow(dialog); return IDCANCEL;
+    }
     SendMessageW(adapt,WM_SETFONT,(WPARAM)font,TRUE); EnableWindow(adapt,canAdapt);
     SendMessageW(omit,WM_SETFONT,(WPARAM)font,TRUE); SendMessageW(cancel,WM_SETFONT,(WPARAM)font,TRUE);
     EnableWindow(window,FALSE); ShowWindow(dialog,SW_SHOW); SetFocus(cancel);
@@ -221,12 +224,19 @@ static void received(void) {
     char *first = strchr(response, '\t'), *second = first ? strchr(first + 1, '\t') : NULL;
     if (!first || !second) { report(L"El motor devolvio una respuesta inesperada. Comprueba la integridad del paquete."); setBusy(0); return; }
     *first = 0; *second = 0;
-    WCHAR path[PATHCAP] = L"", message[8192] = L"", text[PATHCAP + 8192];
+    WCHAR path[PATHCAP] = L"";
+    static WCHAR message[RESPONSECAP], text[PATHCAP + RESPONSECAP];
+    for (char *p = second + 1; *p; p++) {
+        if (*p == '\x1e') *p = '\r';
+        else if (*p == '\x1f') *p = '\n';
+    }
     MultiByteToWideChar(CP_UTF8, 0, first + 1, -1, path, PATHCAP);
-    MultiByteToWideChar(CP_UTF8, 0, second + 1, -1, message, 8192);
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, second + 1, -1, message, RESPONSECAP)) {
+        report(L"No se pudo mostrar el inventario del motor."); setBusy(0); return;
+    }
     if (operation == 1 && (strcmp(response,"DECISION_ADAPT")==0 || strcmp(response,"DECISION_OMIT")==0)) {
         if (window) KillTimer(window,1);
-        int selected = solarDecision(message,strcmp(response,"DECISION_ADAPT")==0);
+        int selected = conversionDecision(message,strcmp(response,"DECISION_ADAPT")==0);
         WCHAR json[COMMANDCAP] = L"{\"command\":\"decision\",\"id\":";
         if (!appendJson(json,path)) { setBusy(0); return; }
         wcscat(json,selected==501 ? L",\"choice\":\"adapt\"}" : selected==502 ? L",\"choice\":\"omit\"}" : L",\"choice\":\"cancel\"}");
@@ -234,14 +244,14 @@ static void received(void) {
     }
     if (operation == 1) {
         if (decisionSmokeChoice) selfTestPassed = strcmp(response,decisionSmokeChoice==IDCANCEL ? "CANCELADO" : "REVISAR_CAMBIOS")==0;
-        hasAttempt = strcmp(response,"CANCELADO")!=0;
+        hasAttempt = 1;
         wcsncpy(lastOutput, path, PATHCAP - 1); lastOutput[PATHCAP - 1] = 0;
-        swprintf(text, PATHCAP + 8192, L"%ls", strcmp(response, "REVISAR") == 0 ? L"Conversión completada." : message);
+        swprintf(text, PATHCAP + RESPONSECAP, L"%ls", strcmp(response, "REVISAR") == 0 ? L"Conversión completada." : message);
     } else if (operation == 2) {
-        swprintf(text, PATHCAP + 8192, L"%ls\r\n\r\n%ls", message, path);
+        swprintf(text, PATHCAP + RESPONSECAP, L"%ls\r\n\r\n%ls", message, path);
     } else {
         selfTestPassed = strcmp(response, "OK") == 0;
-        swprintf(text, PATHCAP + 8192, L"%ls", message);
+        swprintf(text, PATHCAP + RESPONSECAP, L"%ls", message);
     }
     report(text); setBusy(0); if (window) KillTimer(window, 1);
 }
@@ -385,7 +395,7 @@ static void initializeUI(void) {
     headerBrush = CreateSolidBrush(UI_HEADER);
     HWND title = control(L"STATIC", L"Conversor CE3X 3.2 \x2192 2.3", SS_CENTERIMAGE, 36, 31, 688, 33, IDC_TITLE);
     SendMessageW(title, WM_SETFONT, (WPARAM)titleFont, TRUE);
-    HWND version = control(L"STATIC", L"v1.5.1  |  Residencial", 0, 37, 66, 420, 18, IDC_VERSION);
+    HWND version = control(L"STATIC", L"v1.5.2  |  Residencial", 0, 37, 66, 420, 18, IDC_VERSION);
     SendMessageW(version, WM_SETFONT, (WPARAM)smallFont, TRUE);
     control(L"STATIC", L"Archivo de entrada", SS_CENTERIMAGE, 36, 123, 140, 30, IDC_INPUT_LABEL);
     sourceEdit = control(L"EDIT", L"", ES_AUTOHSCROLL | WS_TABSTOP, 182, 123, 403, 30, IDC_SOURCE);
@@ -536,7 +546,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR commandLine, i
     }
     if (argc >= 3 && wcscmp(argv[1], L"--preview-decision") == 0) {
         decisionPreviewPath=argv[2]; ShowWindow(window,SW_SHOWNORMAL); UpdateWindow(window);
-        solarDecision(L"Edificio: SOLAR_MENSUAL. Produccion 1413.258 kWh/ano. Se propone cobertura ACS 70 %. Se pierden reparto mensual y potencia solar. Adaptacion ensayada solo con ACS electrico sin acumulacion, zona D2. Omitir elimina esta instalacion solar de la salida. Revisar y recalcular en CE3X 2.3. El original se conserva.", argc < 4 || wcscmp(argv[3],L"omit") != 0);
+        conversionDecision(L"Edificio: SOLAR_MENSUAL. Produccion 1413.258 kWh/ano. Se propone cobertura ACS 70 %. Se pierden reparto mensual y potencia solar. Adaptacion ensayada solo con ACS electrico sin acumulacion, zona D2. Omitir elimina esta instalacion solar de la salida. Revisar y recalcular en CE3X 2.3. El original se conserva.", argc < 4 || wcscmp(argv[3],L"omit") != 0);
         DestroyWindow(window); LocalFree(argv); return decisionPreviewSaved ? 0 : 1;
     }
     if (argc >= 3 && wcscmp(argv[1], L"--preview") == 0) {

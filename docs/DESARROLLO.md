@@ -22,6 +22,8 @@ python app/converter.py convert --source origen.cex --diagnostic diagnostico.zip
 
 `--template` y `--profile` permiten indicar referencias de desarrollo; por defecto se utilizan los recursos de `app/`.
 
+Si la salida requiere omisiones, el comando devuelve el código 2 y muestra el inventario y los argumentos de cada opción disponible. Repite el comando con los argumentos de la opción aceptada, incluido `--consent TOKEN`. El token vincula el consentimiento con las entradas y esa opción. El código 1 indica un bloqueo o un fallo. Consulta el [inventario de omisiones](OMISIONES_1_5_2.md).
+
 ## Compilar la interfaz en Windows
 
 Instala Zig 0.13.0, añade `zig.exe` al `PATH` y ejecuta:

@@ -4,11 +4,11 @@ Conversor experimental de archivos `.cex` residenciales de CE3X 3.2 a CE3X 2.3 p
 
 ## Descargar
 
-[**Descargar para Windows, versión 1.5.1**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/download/v1.5.1/Conversor_CE3X_Windows_1_5_1.zip)
+[**Descargar para Windows, versión 1.5.2**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/download/v1.5.2/Conversor_CE3X_Windows_1_5_2.zip)
 
 [Releases y notas de cada versión](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases) · [Historial de cambios](CHANGELOG.md)
 
-El ZIP incluye el ejecutable y Python. No necesitas instalar Python ni otros paquetes. En Releases, descarga `Conversor_CE3X_Windows_1_5_1.zip`; los archivos llamados **Source code** contienen los fuentes.
+El ZIP incluye el ejecutable y Python. En Releases, descarga `Conversor_CE3X_Windows_1_5_2.zip`. Los archivos **Source code** contienen los fuentes.
 
 ## Cómo usar la versión publicada
 
@@ -33,13 +33,13 @@ Es una herramienta experimental, no oficial. El estado **REVISAR** indica compro
 
 **Recalcula el edificio, los conjuntos de mejora y el análisis económico en CE3X 2.3.** Los resultados guardados proceden de la versión 3.2. Revisa las instalaciones y regenera los informes y complementos.
 
-Al detectar generadores termosolares mensuales, solicita una decisión antes de generar el archivo:
+Cuando el conversor detecta datos activos que puede omitir con seguridad, presenta un único inventario antes de crear la salida. Incluye los elementos afectados, las dependencias y los cambios de cada opción. La selección inicial es **Cancelar**. Si el programa detecta una estructura cuyo descarte es inseguro, muestra el diagnóstico y detiene la conversión.
 
-- **Adaptar**: convierte la producción anual a cobertura de ACS. Solo disponible en la configuración ensayada de efecto Joule eléctrico conocido al 100 %, cobertura 100 %, sin acumulación, zona D2 y un generador sin contribuciones adicionales.
-- **Omitir lo indicado**: elimina la instalación solar. Dentro de una mejora, elimina el conjunto completo y sus referencias de costes e informe, según advierte el diálogo.
-- **Cancelar**: no genera la salida.
+- **Omitir lo indicado y convertir** aplica el inventario de omisiones mostrado.
+- **Adaptar y convertir** conserva la cobertura anual de ACS en el caso termosolar ensayado y aplica las omisiones que figuran en esa opción. La adaptación pierde el reparto mensual y la potencia solar.
+- **Cancelar** termina la operación sin crear salida.
 
-La adaptación pierde reparto mensual y potencia solar. La decisión aparece en el resultado y se incluye en el diagnóstico solo si se exporta. Los casos no validados permiten omitir o cancelar, con Adaptar deshabilitado. Consulta los [ensayos y límites](docs/VALIDACION_SOLAR.md) y la [validación con ejemplos oficiales](docs/VALIDACION_1_4_1.md).
+Cuando se acepta una opción con pérdidas, el estado **CONVERSION_CON_OMISIONES** identifica el resultado y muestra lo retirado o simplificado. El diagnóstico registra la decisión si el usuario solicita exportarlo. Consulta el [inventario de omisiones](docs/OMISIONES_1_5_2.md) y los [ensayos y límites de la adaptación solar](docs/VALIDACION_SOLAR.md).
 
 No garantiza compatibilidad universal ni genera por sí sola certificados, XML de registro o justificaciones HE0/HE1. La apertura, edición y el recálculo de los resultados siguen pendientes de validación en CE3X 2.3.
 

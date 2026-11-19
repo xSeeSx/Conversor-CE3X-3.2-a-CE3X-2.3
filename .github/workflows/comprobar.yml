@@ -110,7 +110,7 @@ jobs:
       - name: Probar aviso y omision de protecciones nuevas
         shell: pwsh
         run: |
-          python -c "import sys; from pathlib import Path; sys.path.insert(0,'fuentes'); import test_converter as t; x=t.ConverterTests(); x.setUp(); x.blind_fixture(); Path('_validacion/proteccion.cex').write_bytes(t.c.encoded(x.src)); x.tearDown()"
+          python -c "import sys; from pathlib import Path; sys.path.insert(0,'fuentes'); import test_converter as t; x=t.ConverterTests(); x.setUp(); x.blind_fixture(); x.src[2][22]='200'; x.src[12]['Icaen']='configuracion sintetica'; Path('_validacion/proteccion.cex').write_bytes(t.c.encoded(x.src)); x.tearDown()"
           foreach ($choice in @('omit','cancel')) {
             $source = "$pwd/_validacion/proteccion_$choice.cex"
             Copy-Item _validacion/proteccion.cex $source
@@ -167,7 +167,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Conversor_CE3X_1_5_1_artefactos
+          name: Conversor_CE3X_1_5_2_artefactos
           path: |
             _release/*
             _validacion/**
@@ -183,16 +183,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: Conversor_CE3X_1_5_1_artefactos
+          name: Conversor_CE3X_1_5_2_artefactos
           path: artifact
-      - name: Publicar 1.5.1
+      - name: Publicar 1.5.2
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
           if [ "$head" != "$GITHUB_SHA" ]; then echo 'Compilacion anterior al ultimo cambio, no publicar.'; exit 0; fi
-          if gh release view v1.5.1 >/dev/null 2>&1; then
+          if gh release view v1.5.2 >/dev/null 2>&1; then
             echo 'La version ya existe, no se modifica.'
           else
-            gh release create v1.5.1 artifact/_release/Conversor_CE3X_Windows_1_5_1.zip artifact/_release/SHA256SUMS.txt --target "$GITHUB_SHA" --title '1.5.1 - Particiones y protecciones solares' --notes-file docs/RELEASE_1_5_1.md
+            gh release create v1.5.2 artifact/_release/Conversor_CE3X_Windows_1_5_2.zip artifact/_release/SHA256SUMS.txt --target "$GITHUB_SHA" --title '1.5.2 - Inventario y consentimiento de omisiones' --notes-file docs/RELEASE_1_5_2.md
           fi

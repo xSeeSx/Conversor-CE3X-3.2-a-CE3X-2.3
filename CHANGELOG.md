@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## 1.5.2
+
+- Inventario previo de recortes y reinicios, con elementos afectados, dependencias y consentimiento explícito antes de crear la salida.
+- Bloqueo de formatos sin una regla segura y comprobación de referencias al retirar conjuntos de mejora.
+- Resumen `CONVERSION_CON_OMISIONES` y diagnóstico bajo petición. Se mantiene la adaptación termosolar del caso ensayado.
+- Regresiones sintéticas para pérdidas simultáneas, cancelación, consentimiento caducado y campos desconocidos. Las dos muestras residenciales oficiales comprueban la decisión previa y la conservación del original.
+
 ## 1.5.1 - 2026-11-18
 
 - Admitida la clase nativa de zonas y añadida una prueba con zonas anidadas.
