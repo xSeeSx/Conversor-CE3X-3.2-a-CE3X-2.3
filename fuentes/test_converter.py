@@ -196,6 +196,22 @@ class ConverterTests(unittest.TestCase):
         self.blind_fixture();self.source_path.write_bytes(c.encoded(self.src))
         code,run=c.convert(self.source_path,c.ROOT/'plantilla_23.cex',solar_choices={'window-protection:building':'adapt'})
         self.assertEqual(code,1);self.assertEqual(run.manifest['error_code'],'E_SOLAR_SCOPE');self.assertFalse(run.output.exists())
+    def test_observed_ce3x_blind_needs_consent_and_keeps_window_thermal_values(self):
+        evidence = json.loads((Path(__file__).parent/'fixtures'/'persiana_ce3x.json').read_text(encoding='utf-8'))
+        source = self.src[3][1][0].state
+        source.update(evidence['estado_32'])
+        self.assertNotEqual(source['correctorFSCTE'], evidence['estado_23']['correctorFSCTE'])
+        code, plan = self.run_convert()
+        self.assertEqual(code, 2, plan.summary)
+        self.assertEqual(set(plan.manifest['pending_plan']['options']), {'omit'})
+        code, result = self.accept(plan)
+        self.assertEqual(code, 0, result.summary)
+        target = c.read_cex(result.output)[3][1][0].state
+        for key in ('Gvidrio','Uvidrio','Umarco','superficie','cerramientoAsociado'):
+            self.assertEqual(target[key], source[key])
+        self.assertEqual(target['correctorFSVerano'], 1.0)
+        self.assertEqual(c.sha(self.source_path), plan.manifest['source_sha256'])
+
     def test_window_protection_cancel_does_not_write(self):
         self.blind_fixture();self.source_path.write_bytes(c.encoded(self.src));inp=io.StringIO(json.dumps({'command':'convert','source':str(self.source_path)})+'\n'+json.dumps({'command':'decision','id':'window-protection:building','choice':'cancel'})+'\n');out=io.StringIO()
         c.serve(inp,out);self.assertIn('DECISION_OMIT',out.getvalue());self.assertIn('CANCELADO',out.getvalue());self.assertFalse(c.output_path(self.source_path).exists())
@@ -576,13 +592,20 @@ class ConverterTests(unittest.TestCase):
         self.assertAlmostEqual(a.manifest['pending_solar']['candidate']['percent'],70)
         self.assertEqual(set(self.root.iterdir()),{self.source_path,self.template_path})
     def test_solar_adaptation_preserves_annual_effect_of_tested_ce3x_cases(self):
-        for values,expected in [([117.7715]*12,70),([0]*6+[1413.258]+[0]*5,70),(list(range(10,22)),9.21275520817855)]:
-            with self.subTest(values=values):
+        evidence = json.loads((Path(__file__).parent/'fixtures'/'solar_d2_ensayos.json').read_text(encoding='utf-8'))
+        for case in evidence['casos']:
+            values = case['produccion_mensual_kwh']
+            expected = case['cobertura_calculada_pct']
+            with self.subTest(case=case['nombre']):
                 self.solar_fixture(values);code,a=self.solar_convert({'91':'adapt'}, accept=True)
                 self.assertEqual(code,0,a.summary)
                 dst=c.read_cex(a.output);self.assertAlmostEqual(float(dst[4][6][0][2][0]),expected,places=9)
                 self.assertEqual(len(dst[4]),12);self.assertIn('Adaptado',a.manifest['decision_summary'])
                 self.assertEqual(len(c.read_cex(self.source_path)[4][12]),1)
+                trace = a.manifest['solar_decisions'][0]['candidate']
+                self.assertAlmostEqual(trace['demand'], evidence['demanda_acs_kwh_ano'])
+                self.assertEqual(list(trace['entrada']['produccion_mensual_kwh'].values()), values)
+                self.assertEqual(trace['entrada']['parametros']['acs_litros_dia'], evidence['acs_litros_dia'])
                 a.output.unlink()
     def test_solar_omission_is_explicit_and_preserves_main_equipment(self):
         self.solar_fixture();before=c.typed_value(self.src[4][0])
@@ -603,6 +626,49 @@ class ConverterTests(unittest.TestCase):
     def test_solar_overflow_does_not_offer_adaptation(self):
         self.solar_fixture([1e308]*12);self.src[2][9]='1e308'
         self.assertIsNone(c.solar_issues(self.src)[0]['candidate'])
+
+    def test_solar_scope_requires_observed_area_demand_and_equipment(self):
+        for case in ('area', 'area_adicional', 'demanda', 'cobertura_inconsistente',
+                     'acumulacion_inactiva_con_valores', 'calefaccion'):
+            with self.subTest(case=case):
+                self.solar_fixture()
+                acs = self.src[4][0][0]
+                if case == 'area':
+                    self.src[2][6] = '101'
+                    acs[5][0][0] = '101'
+                elif case == 'area_adicional':
+                    self.src[2][22] = '101'
+                elif case == 'demanda':
+                    self.src[2][9] = '101'
+                elif case == 'cobertura_inconsistente':
+                    acs[5][0][0] = '99'
+                elif case == 'acumulacion_inactiva_con_valores':
+                    acs[8] = [False, '100', '80', '60', '5', 'Por defecto']
+                else:
+                    heater = copy.deepcopy(acs)
+                    heater[0:2] = ['Calefaccion adicional', 'calefaccion']
+                    self.src[4][1].append(heater)
+                code, result = self.solar_convert()
+                self.assertEqual(code, 2, result.summary)
+                self.assertNotIn('adapt', result.manifest['pending_plan']['options'])
+                self.assertFalse(result.output.exists())
+
+    def test_monthly_electric_generation_and_active_ventilation_are_blocked(self):
+        generator = c.CexObject(c.GlobalRef('models','GeneradorElectrico'),
+                                {'nombre':'Generacion electrica mensual','enero':100,'consumoMensual':[12]*12})
+        self.src[4][13] = [generator]
+        code, result = self.run_convert()
+        self.assertEqual(code, 1)
+        self.assertEqual(result.manifest['error_code'], 'E_NEW_SYSTEM')
+        self.assertIn('autoconsumo computable por servicio', result.summary)
+        self.assertFalse(result.output.exists())
+        self.src[4][13] = []
+        self.src[4][8] = [['Recuperador de calor','ventilacion','250','0.8']]
+        code, result = self.run_convert()
+        self.assertEqual(code, 1)
+        self.assertEqual(result.manifest['error_code'], 'E_SYSTEM_UNSUPPORTED')
+        self.assertIn('caudal, recuperacion y consumo', result.summary)
+        self.assertFalse(result.output.exists())
     def test_solar_stale_choice_and_changed_file_rejected(self):
         self.solar_fixture();code,a=self.solar_convert({'unknown':'omit'})
         self.assertEqual(code,1)
@@ -703,7 +769,7 @@ class ConverterTests(unittest.TestCase):
 
     def test_consent_does_not_authorize_modified_source_or_other_option(self):
         self.solar_fixture()
-        self.src[2][22] = '200'
+        self.src[2][23] = '1'
         code, analysis = self.run_convert()
         self.assertEqual(code, 2, analysis.summary)
         selected = analysis.manifest['pending_plan']['options']['omit']
@@ -711,7 +777,7 @@ class ConverterTests(unittest.TestCase):
                                  consent=selected['token'])
         self.assertEqual(result.manifest['error_code'], 'E_CONSENT_CHANGED')
         self.assertFalse(result.output.exists())
-        self.src[2][22] = '201'
+        self.src[2][23] = '2'
         self.source_path.write_bytes(c.encoded(self.src))
         code, result = self.accept(analysis)
         self.assertEqual(result.manifest['error_code'], 'E_CONSENT_CHANGED')

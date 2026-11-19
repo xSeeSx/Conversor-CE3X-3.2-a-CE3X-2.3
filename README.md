@@ -36,7 +36,7 @@ Es una herramienta experimental, no oficial. El estado **REVISAR** indica compro
 Cuando el conversor detecta datos activos que puede omitir con seguridad, presenta un único inventario antes de crear la salida. Incluye los elementos afectados, las dependencias y los cambios de cada opción. La selección inicial es **Cancelar**. Si el programa detecta una estructura cuyo descarte es inseguro, muestra el diagnóstico y detiene la conversión.
 
 - **Omitir lo indicado y convertir** aplica el inventario de omisiones mostrado.
-- **Adaptar y convertir** conserva la cobertura anual de ACS en el caso termosolar ensayado y aplica las omisiones que figuran en esa opción. La adaptación pierde el reparto mensual y la potencia solar.
+- **Adaptar y convertir** conserva la cobertura anual de ACS en el caso termosolar ensayado y aplica las omisiones que figuran en esa opción. La adaptación pierde el reparto mensual y la potencia solar. [Alcance del ensayo](docs/EQUIVALENCIAS_Y_LIMITES.md#termosolar-mensual-para-acs)
 - **Cancelar** termina la operación sin crear salida.
 
 Cuando se acepta una opción con pérdidas, el estado **CONVERSION_CON_OMISIONES** identifica el resultado y muestra lo retirado o simplificado. El diagnóstico registra la decisión si el usuario solicita exportarlo. Consulta el [inventario de omisiones](docs/OMISIONES_1_5_2.md) y los [ensayos y límites de la adaptación solar](docs/VALIDACION_SOLAR.md).

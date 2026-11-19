@@ -1,0 +1,32 @@
+{
+  "evidence": "docs/VALIDACION_SOLAR.md. Ensayos nativos residenciales CE3X 2.3 y 3.2.",
+  "area_m2": 100,
+  "acs_litros_dia": 100,
+  "demanda_acs_kwh_ano": 2018.94,
+  "casos": [
+    {
+      "nombre": "Uniforme a 70 por ciento",
+      "produccion_mensual_kwh": [117.7715, 117.7715, 117.7715, 117.7715, 117.7715, 117.7715, 117.7715, 117.7715, 117.7715, 117.7715, 117.7715, 117.7715],
+      "cobertura_calculada_pct": 70,
+      "consumo_final_acs_ambos_kwh_m2_ano": 6.06
+    },
+    {
+      "nombre": "Concentrado en julio",
+      "produccion_mensual_kwh": [0, 0, 0, 0, 0, 0, 1413.258, 0, 0, 0, 0, 0],
+      "cobertura_calculada_pct": 70,
+      "consumo_final_acs_ambos_kwh_m2_ano": 6.06
+    },
+    {
+      "nombre": "Produccion creciente",
+      "produccion_mensual_kwh": [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+      "cobertura_calculada_pct": 9.21275520817855,
+      "consumo_final_acs_ambos_kwh_m2_ano": 18.33
+    },
+    {
+      "nombre": "Uniforme de 186 kWh al año",
+      "produccion_mensual_kwh": [15.5, 15.5, 15.5, 15.5, 15.5, 15.5, 15.5, 15.5, 15.5, 15.5, 15.5, 15.5],
+      "cobertura_calculada_pct": 9.21275520817855,
+      "consumo_final_acs_ambos_kwh_m2_ano": 18.33
+    }
+  ]
+}

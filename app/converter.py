@@ -440,12 +440,17 @@ def adapt_systems(source, audit, profile, path_prefix='instalaciones'):
     if len(source)>12:
         extra=source[12:]
         active = [(12+i, x) for i,x in enumerate(extra) if not empty(x)]
+        electrical = isinstance(extra[1], list) and any(
+            isinstance(row, CexObject) and row.cls == GlobalRef('models', 'GeneradorElectrico')
+            for row in extra[1])
         require(not active, 'E_NEW_SYSTEM',
                 'Grupos de instalaciones sin omision segura: ' + ', '.join(
                     f'{i} ({len(x) if isinstance(x, list) else 1}): ' + ', '.join(
                         str(row.state.get('nombre', row.cls.name)) if isinstance(row, CexObject)
                         else str(row[0]) if isinstance(row, list) and row else type(row).__name__
-                        for row in (x if isinstance(x, list) else [x])) for i,x in active), path_prefix+'[12:]')
+                        for row in (x if isinstance(x, list) else [x])) for i,x in active)
+                + ('. Generacion electrica mensual: falta autoconsumo computable por servicio contrastado en 2.3.'
+                   if electrical else ''), path_prefix+'[12:]')
         audit.omit(path_prefix+'[12:]',extra,'Grupos nuevos vacios de CE3X 3.2 sin equivalente contrastado', count=2)
         audit.change('SYSTEM_GROUPS',path_prefix+'.length',len(source),12,'Retirados dos grupos adicionales vacios de 3.2')
     output=copy.deepcopy(source[:12])
@@ -465,6 +470,10 @@ def adapt_systems(source, audit, profile, path_prefix='instalaciones'):
                 continue
             if g>5:
                 # No se inventan conversiones para contribuciones/terciario no contrastadas.
+                if g in (8, 9):
+                    raise ConversionError('E_SYSTEM_UNSUPPORTED',
+                        f'{entry[0] if entry else "Equipo"}: ventilacion o ventiladores activos. '
+                        'Falta una representacion residencial 2.3 contrastada para caudal, recuperacion y consumo.',p)
                 raise ConversionError('E_SYSTEM_UNSUPPORTED','Grupo activo sin regla contrastada; se necesita muestra nativa 2.3',p)
             require(len(entry) in (10,11),'E_SYSTEM_ROW',f'Esperados 10/11 campos; hay {len(entry)}',p)
             require(entry[1] in ('ACS','calefaccion','refrigeracion','climatizacion','mixto2','mixto3'),
@@ -687,6 +696,10 @@ def convert_measures(measures,economics,profile,audit):
 SOLAR_MONTHS = ('enero','febrero','marzo','abril','mayo','junio',
                 'julio','agosto','septiembre','octubre','noviembre','diciembre')
 SOLAR_FIELDS = set(SOLAR_MONTHS) | {'nombre','zona','potencia','id','servicio','tipo','consumoMensual'}
+SOLAR_D2_TEST = {
+    'area_m2': 100.0, 'acs_litros_dia': 100.0, 'dias': 360, 'calor_especifico_kj_kg_k': 4.18,
+    'temperatura_acs_c': 60.0, 'temperatura_agua_fria_c': 11.7,
+}
 
 
 def solar_key(generator):
@@ -718,24 +731,36 @@ def solar_candidate(generators, systems, general, envelope_changes=False):
         require(s.get('zona')=='Edificio Objeto','E_SOLAR_SCOPE','Solar asignada a una zona no validada')
         require(not envelope_changes,'E_SOLAR_SCOPE','Mejora combinada con otros cambios no validada')
         require(len(general)>=10 and general[4]=='D2','E_SOLAR_SCOPE','Zona climatica distinta de la ensayada (D2)')
-        require(len(systems[0])==1 and not systems[4] and not systems[5] and not systems[6],
-                'E_SOLAR_SCOPE','Combinacion de instalaciones o contribuciones no validada')
+        require(len(systems[0])==1 and not any(group for i, group in enumerate(systems) if i not in (0,12)),
+                'E_SOLAR_SCOPE','Solo se ha ensayado un equipo de ACS sin otras instalaciones ni contribuciones')
         acs=systems[0][0]
         require(acs[1]=='ACS' and acs[3]=='Efecto Joule' and acs[4]=='Electricidad'
                 and str(acs[6]).startswith('Conocido') and acs[-1]=='Edificio Objeto',
                 'E_SOLAR_SCOPE','Solo se ha ensayado ACS electrico de efecto Joule conocido')
         require(as_num(acs[2][0],'solar.rendimiento')==100 and as_num(acs[5][0][1],'solar.cobertura')==100,
                 'E_SOLAR_SCOPE','Rendimiento y cobertura deben ser 100 %')
-        require(isinstance(acs[8],list) and acs[8] and acs[8][0] is False,
+        require(isinstance(acs[8],list) and acs[8] and acs[8][0] is False
+                and all(empty(value) for value in acs[8][1:]),
                 'E_SOLAR_SCOPE','No se ha validado ACS con acumulacion')
         flow=as_num(general[9],'solar.ACS',minimum=0)
-        require(flow>0 and as_num(general[6],'solar.area',minimum=0)>0,'E_SOLAR_SCOPE','Demanda o superficie nula')
-        demand=360*4.18*flow*(60-11.7)/3600
-        production=sum(as_num(s[m],'solar.'+m,minimum=0) for m in SOLAR_MONTHS)
-        as_num(s['potencia'],'solar.potencia',minimum=0)
+        area=as_num(general[6],'solar.area',minimum=0)
+        require(flow == SOLAR_D2_TEST['acs_litros_dia'] and area == SOLAR_D2_TEST['area_m2']
+                and as_num(acs[5][0][0],'solar.superficie_cubierta') == area
+                and (len(general) <= 22 or empty(general[22])
+                     or as_num(general[22],'solar.superficie_adicional') == area),
+                'E_SOLAR_SCOPE','El ensayo usa 100 litros diarios y una superficie de 100 m2 completamente cubierta')
+        params = SOLAR_D2_TEST
+        demand = (params['dias'] * params['calor_especifico_kj_kg_k'] * flow
+                  * (params['temperatura_acs_c'] - params['temperatura_agua_fria_c']) / 3600)
+        monthly = {m:as_num(s[m],'solar.'+m,minimum=0) for m in SOLAR_MONTHS}
+        production=sum(monthly.values())
+        power=as_num(s['potencia'],'solar.potencia',minimum=0)
         require(math.isfinite(demand) and math.isfinite(production),'E_SOLAR_SCOPE','Balance anual no finito')
         require(0<production<=demand,'E_SOLAR_SCOPE','Produccion nula o superior a la demanda anual; caso no validado')
-        return {'percent':production/demand*100,'production':production,'demand':demand},''
+        return {'percent':production/demand*100,'production':production,'demand':demand,
+                'entrada': {'parametros': dict(params), 'produccion_mensual_kwh': monthly, 'potencia_original': power},
+                'formula': '100 * suma(produccion_mensual_kwh) / demanda_acs_anual_kwh',
+                'evidencia': 'docs/VALIDACION_SOLAR.md'},''
     except (ConversionError,KeyError,TypeError,IndexError) as exc:
         return None,str(exc)
 
@@ -800,7 +825,8 @@ def solar_issues(source):
             name=str(generator.state.get('nombre','Generador solar'))
             desc=f'{context}: {name}. '
             if candidate:
-                desc+=(f"Produccion {candidate['production']:.6g} kWh/ano. Se propone cobertura ACS "
+                desc+=(f"Produccion {candidate['production']:.6g} kWh/ano y demanda ACS {candidate['demand']:.6g} kWh/ano. "
+                       f"Se propone cobertura ACS "
                        f"{candidate['percent']:.8g} %. Se pierden reparto mensual y potencia solar. "
                        'Adaptacion ensayada solo con ACS electrico sin acumulacion, zona D2. ')
             else:desc+='Adaptacion no validada: '+reason+'. '
