@@ -28,6 +28,7 @@ El original no se modifica. El resultado se guarda junto a él. La conversión s
 ## Criterios y fórmulas de adaptación
 
 Las opciones experimentales se identifican antes de convertir y requieren consentimiento y recálculo.
+El aviso experimental recomienda comparar ambos certificados y permite consultar el inventario completo en **Ver detalles**.
 
 ```text
 Demanda_ACS (kWh/año) = 360 × 4,18 × litros_ACS_día × (60 − T_red_zona) / 3600

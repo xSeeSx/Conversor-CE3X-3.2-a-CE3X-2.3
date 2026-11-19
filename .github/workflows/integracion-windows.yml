@@ -158,7 +158,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Fallo al preparar la muestra experimental.' }
           $source = "$pwd/_validacion/acs_experimental.cex"
           $marker = "$pwd/_validacion/acs_experimental.txt"
-          $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--smoke-decision', $source, 'adapt', $marker) -PassThru -Wait -WindowStyle Hidden
+          $collapsed = "$pwd/_validacion/aviso_experimental.bmp"
+          $expanded = "$pwd/_validacion/aviso_experimental_detalles.bmp"
+          $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--smoke-decision', $source, 'adapt', $marker, $collapsed, $expanded) -PassThru -Wait -WindowStyle Hidden
           if ($process.ExitCode -ne 0 -or (Get-Content $marker -Raw).Trim() -ne 'OK') { throw 'Fallo de consentimiento experimental.' }
           python -B -c "import sys; sys.path.insert(0,'app'); import converter as c; b=c.read_cex('_validacion/acs_experimental_CE3X2.3.cex'); assert b[2][4]=='D1' and b[2][9]=='110' and b[4][6]"
           if ($LASTEXITCODE -ne 0) { throw 'La conversion experimental no conservo la zona, el caudal y la contribucion de ACS.' }
@@ -200,4 +202,5 @@ jobs:
             _validacion/probe_*.txt
             _validacion/ejemplos_oficiales.json
             _validacion/bateria_final/resultados.json
+            _validacion/aviso_experimental*.bmp
           retention-days: 14
