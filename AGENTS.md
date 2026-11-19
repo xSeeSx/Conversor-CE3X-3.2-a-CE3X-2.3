@@ -1,5 +1,9 @@
 # Instrucciones para Codex y otros agentes de desarrollo
 
+## Próxima prioridad de implementación
+
+**P0: solar térmica adaptada a los datos reales del certificado.** Lee y ejecuta primero [docs/PLAN_ADAPTACIONES_PENDIENTES.md](docs/PLAN_ADAPTACIONES_PENDIENTES.md): eliminar las restricciones arbitrarias D2/100 m²/100 L/día, calcular a partir de la demanda real y validar en CE3X 2.3 y 3.2. No dar por válida una fórmula general sin ensayos ni borrar elementos sin consentimiento. Después abordar el backlog del mismo documento según prioridad. Este es un objetivo pendiente, **no una funcionalidad ya implementada**.
+
 ## Documentación de compatibilidad obligatoria
 
 El README contiene las secciones **Qué funciona y qué falta** y **Criterios y fórmulas de adaptación**. **Mantenlas actualizadas en el mismo cambio de código** cada vez que se añada, cambie, limite o retire una adaptación, omisión o bloqueo de CE3X 3.2 a 2.3. No es una tarea para aplazar al cierre de la sesión.
