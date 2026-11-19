@@ -50,6 +50,27 @@ En unidades del ensayo: `dias_23=360`, `ρ_agua≈1 kg/L` absorbida al usar litr
 
 **Importante:** que CE3X 3.2 posea un campo nuevo **no significa** que sea energéticamente relevante ni que deba bloquearse siempre. Clasificar con pruebas: conservar, calcular, omitir con aviso, o bloquear. No confundir la conservación de la estructura con la igualdad de resultados energéticos.
 
+## Resultado esperado en pantalla
+
+Estas son las situaciones que el usuario debe poder distinguir **antes** de convertir, no solo después de recibir un error:
+
+| Caso | Comportamiento objetivo |
+| --- | --- |
+| Solar térmica con datos suficientes, aunque no sea D2 ni tenga 100 m² o 100 L/día | Calcular con parámetros **del certificado** y ofrecer **Adaptar**, con detalle de la pérdida de información mensual y prueba energética representativa. No bloquear por los valores específicos del ejemplo. |
+| Solar térmica reconocida pero sin equivalencia energética completamente validada | Cuando el formato 2.3 y sus dependencias sean seguros, ofrecer **adaptación experimental** con advertencia visible y consentimiento diferenciado. Si no es seguro, ofrecer omisión consentida solo cuando sea coherente; en otro caso, bloquear con motivo específico. |
+| Persiana nueva aislada o combinada con sombras | Intentar conservar su efecto mediante «Otros» en 2.3 **solo después** de probar la discrepancia del factor CTE. Hasta entonces mantener la omisión segura y el bloqueo de combinaciones sin garantía. |
+| Producción fotovoltaica mensual | Si está acreditado el **autoconsumo computable**, adaptar a la contribución anual compatible. Nunca tratar la producción total como energía consumida. |
+| Ventilación con recuperador | Separar el efecto en demanda térmica del consumo eléctrico de ventiladores. No reemplazarlos por un porcentaje genérico no comprobado. |
+| Medidas de mejora con elementos nuevos | Mantener cerramientos, instalaciones, vínculos y costes. Si se retira una actuación por consentimiento, detallar exactamente qué conjunto y referencias desaparecen. |
+
+### Entregables y comprobaciones de Codex
+
+- [ ] **P0** funciona en archivos de prueba con **al menos dos zonas climáticas**, varias demandas diarias de ACS y superficies distintas, sin dependencia de constantes del ejemplo.
+- [ ] Se prueba **abrir, recalcular, guardar y exportar XML** en CE3X 2.3 para cada nueva equivalencia habilitada y se comparan los resultados con un modelo nativo equivalente, diferenciando discrepancias del propio motor.
+- [ ] Cada bloqueo restante explica **por qué** no se puede adaptar u omitir, y no solo «caso no ensayado».
+- [ ] Se documenta el estado real de P1/P2/P3 después de investigar: implementado, experimental, omisión permitida, bloqueo necesario o pendiente por falta de evidencia. **No declarar completado aquello que siga pendiente.**
+- [ ] Pruebas de regresión superadas, documentación técnica actualizada y README breve, sin anunciar una función en la release anterior a su publicación.
+
 ## Forma de trabajar
 
 - Primero P0. Reutilizar `scripts/validar_bateria_final.py` y las pruebas locales; evitar interacciones gráficas repetitivas.
