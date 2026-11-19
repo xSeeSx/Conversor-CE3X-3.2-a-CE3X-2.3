@@ -18,7 +18,7 @@ El original no se modifica. El resultado se guarda junto a él. La conversión s
 | --- | --- |
 | Cerramientos (10 tipologías), ventanas convencionales, puentes térmicos y sombras | ✅ Se conservan los datos contrastados |
 | Instalaciones habituales, fotovoltaica **anual** y mejoras compatibles con sus costes | ✅ Se conservan los datos contrastados |
-| Solar térmica **mensual** | ⚠️ Adaptable solo en el caso ACS D2 ensayado; en otros casos, omisión consentida o bloqueo |
+| Solar térmica **mensual** | ⚠️ Solo se adapta en una configuración de prueba muy concreta: zona D2, 100 m², ACS de 100 L/día y equipo eléctrico específico. En los demás casos, omisión consentida o bloqueo |
 | Persianas nuevas | ⚠️ Solo omisión consentida si están aisladas; combinadas con sombras o mejoras, bloqueo |
 | Generación eléctrica **mensual** | ❌ Sin adaptación validada, bloqueo |
 | Ventilación, recuperadores y otros sistemas nuevos activos | ❌ Sin adaptación validada, bloqueo |
@@ -29,7 +29,7 @@ El original no se modifica. El resultado se guarda junto a él. La conversión s
 
 **Solo se habilitan equivalencias contrastadas en CE3X 2.3 y 3.2.** No se equipara una fórmula plausible con una conversión validada.
 
-**Solar térmica, implementada en el ensayo D2:**
+**Solar térmica: adaptación experimental, no general.** Solo se ofrece si el edificio reproduce exactamente el caso de prueba:
 
 ```text
 Solar_anual (kWh) = suma de las 12 producciones mensuales
@@ -37,7 +37,7 @@ Demanda_ACS (kWh) = 360 × 4,18 × 100 × (60 - 11,7) / 3600 = 2.018,94
 Cobertura_ACS_2.3 (%) = 100 × Solar_anual / Demanda_ACS
 ```
 
-Solo para **D2, 100 m², 100 L/día de ACS y un equipo eléctrico de efecto Joule al 100 %**, sin acumulación ni otras instalaciones o contribuciones. Se pierde el reparto mensual y la potencia. [Ensayo y todas las condiciones](docs/VALIDACION_SOLAR.md).
+Solo funciona con **zona climática D2, 100 m², 100 L/día de ACS y un único equipo eléctrico de efecto Joule al 100 %**, sin acumulación ni otras instalaciones o contribuciones. **Fuera de ese supuesto, no ofrece adaptar**: permite omitir la instalación con consentimiento cuando es seguro, o bloquea. Se pierden la distribución mensual y la potencia. [Ensayo completo](docs/VALIDACION_SOLAR.md).
 
 **Criterios pendientes, NO implementados:**
 
