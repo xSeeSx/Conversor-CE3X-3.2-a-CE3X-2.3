@@ -26,7 +26,7 @@ En `docs/MATRIZ_COMPATIBILIDAD.md` y, si conviene, aquí, cada conversión neces
 6. **Consentimiento/diagnóstico**: identificar **qué hueco o instalación** y **qué opción exacta** convierte o descarta.
 7. **Cobertura al nivel de opciones**: recuento por subtipo o combinación comprobada, sin porcentajes inventados sobre un universo desconocido.
 
-**Probar sin combinatoria explosiva:** todas las ramas discretas de alto impacto, valores extremos y límites numéricos, pares de opciones que interactúan (pairwise), y algunas combinaciones reales de alto riesgo. Las combinaciones con dependencia energética múltiple (sombras + persiana + mejora, acumulación + varios equipos, generador compartido) merecen tests específicos. Documentar lo no probado; no convertir "pasan 10 casos" en "todas las configuraciones".
+**Validar el algoritmo, no cada valor:** primero extraer de CE3X la ecuación, tabla o regla que cubre la familia y trasladarla a una función parametrizada. Probar todas las ramas **distintas por su funcionamiento** y los límites, pero no construir un certificado nativo por cada color, zona climática, caudal o superficie. Usar unit tests parametrizados, clases de equivalencia, límites numéricos y combinaciones representativas de interacciones (pairwise). Reservar ensayos nativos 3.2/2.3 para unas pocas configuraciones que contrasten **cada regla física/algorítmica diferenciada** y las interacciones de alto riesgo. La cobertura es el **dominio matemático demostrado** y las estructuras destino admitidas, no una lista de ejemplos exitosos. No inferir igualdad física únicamente porque dos exportaciones coincidan.
 
 ## Inventario inicial sobre la v1.5.4
 
@@ -53,8 +53,8 @@ Esta tabla es **inventario parcial**, no una lista completa de todas las opcione
 
 1. Inventariados los subtipos/opciones que soporta el programa y las interacciones importantes, con fuente de evidencia.
 2. Documentados por opción los estados y límites anteriores; sin dar por compatibles variantes no ensayadas.
-3. Pruebas positivas, negativas y de límites para **cada rama soportada**.
+3. Pruebas positivas, negativas y de límites para **cada rama algorítmica soportada**, sin exigir un certificado por valor continuo o color equivalente.
 4. Comprobada apertura, recálculo, guardado y XML en CE3X 2.3 para cada equivalencia física nueva representativa.
 5. README solo comunica el ámbito real en una frase; el detalle vive en esta matriz y en `docs/EQUIVALENCIAS_Y_LIMITES.md`.
 
-**No bloquees por una condición arbitraria copiada del único ejemplo**, como `color=="Blanco"` o `zona=="D2"`, **si la equivalencia es independiente de ella**. Pero **no elimines esa condición** hasta revisar de dónde salen los parámetros efectivos y probar la hipótesis. Si el dato simplemente no existe en 2.3, documentar la pérdida y cuál es el sustituto aceptado.
+**Implementa y valida fórmulas o tablas generalizables en el código, no listas de excepciones basadas en ejemplos.** **No bloquees por una condición arbitraria copiada del único ejemplo**, como `color=="Blanco"` o `zona=="D2"`, **si la equivalencia es independiente de ella**. Pero **no elimines esa condición** hasta revisar de dónde salen los parámetros efectivos y probar la hipótesis. Si el dato simplemente no existe en 2.3, documentar la pérdida y cuál es el sustituto aceptado.
