@@ -696,9 +696,10 @@ def convert_measures(measures,economics,profile,audit):
 SOLAR_MONTHS = ('enero','febrero','marzo','abril','mayo','junio',
                 'julio','agosto','septiembre','octubre','noviembre','diciembre')
 SOLAR_FIELDS = set(SOLAR_MONTHS) | {'nombre','zona','potencia','id','servicio','tipo','consumoMensual'}
-SOLAR_D2_TEST = {
-    'area_m2': 100.0, 'acs_litros_dia': 100.0, 'dias': 360, 'calor_especifico_kj_kg_k': 4.18,
-    'temperatura_acs_c': 60.0, 'temperatura_agua_fria_c': 11.7,
+# Coinciden para las variantes peninsular y extrapeninsular de ambos motores.
+ACS_TEMPERATURES = {
+    'A3':15.5, 'A4':15.7, 'B3':14.9, 'B4':15.4, 'C1':12.6, 'C2':13.4,
+    'C3':13.4, 'C4':14.4, 'D1':11.2, 'D2':11.7, 'D3':12.8, 'E1':10.4,
 }
 
 
@@ -719,7 +720,7 @@ def solar_key(generator):
 
 
 def solar_candidate(generators, systems, general, envelope_changes=False):
-    """Only the electric DHW, no-storage D2 configuration tested in CE3X is offered."""
+    """Project one supported DHW generator, flagging configurations beyond the native comparison."""
     try:
         require(len(generators)==1,'E_SOLAR_SCOPE','Solo se ha validado un generador por instalacion')
         g=generators[0]
@@ -730,7 +731,9 @@ def solar_candidate(generators, systems, general, envelope_changes=False):
                 'E_SOLAR_SCOPE','Servicio o tipo solar no validado')
         require(s.get('zona')=='Edificio Objeto','E_SOLAR_SCOPE','Solar asignada a una zona no validada')
         require(not envelope_changes,'E_SOLAR_SCOPE','Mejora combinada con otros cambios no validada')
-        require(len(general)>=10 and general[4]=='D2','E_SOLAR_SCOPE','Zona climatica distinta de la ensayada (D2)')
+        zone = general[4]
+        require(zone in ACS_TEMPERATURES, 'E_SOLAR_SCOPE',
+                'Temperatura de red sin criterio contrastado para la zona '+str(zone))
         require(len(systems[0])==1 and not any(group for i, group in enumerate(systems) if i not in (0,12)),
                 'E_SOLAR_SCOPE','Solo se ha ensayado un equipo de ACS sin otras instalaciones ni contribuciones')
         acs=systems[0][0]
@@ -744,12 +747,16 @@ def solar_candidate(generators, systems, general, envelope_changes=False):
                 'E_SOLAR_SCOPE','No se ha validado ACS con acumulacion')
         flow=as_num(general[9],'solar.ACS',minimum=0)
         area=as_num(general[6],'solar.area',minimum=0)
-        require(flow == SOLAR_D2_TEST['acs_litros_dia'] and area == SOLAR_D2_TEST['area_m2']
-                and as_num(acs[5][0][0],'solar.superficie_cubierta') == area
-                and (len(general) <= 22 or empty(general[22])
-                     or as_num(general[22],'solar.superficie_adicional') == area),
-                'E_SOLAR_SCOPE','El ensayo usa 100 litros diarios y una superficie de 100 m2 completamente cubierta')
-        params = SOLAR_D2_TEST
+        require(flow > 0 and area > 0, 'E_SOLAR_SCOPE', 'Demanda diaria de ACS y superficie deben ser positivas')
+        require(as_num(acs[5][0][0],'solar.superficie_cubierta') == area,
+                'E_SOLAR_SCOPE','La superficie cubierta declarada contradice la cobertura total de ACS')
+        extra_area = (as_num(general[22], 'solar.superficie_adicional', minimum=0)
+                      if len(general) > 22 and not empty(general[22]) else None)
+        require(empty(s.get('consumoMensual')), 'E_SOLAR_SCOPE',
+                'El generador declara un consumo mensual separado sin representacion contrastada')
+        params = {'zona':zone, 'area_m2':area, 'acs_litros_dia':flow, 'dias':360,
+                  'calor_especifico_kj_kg_k':4.18, 'temperatura_acs_c':60.0,
+                  'temperatura_agua_fria_c':ACS_TEMPERATURES[zone]}
         demand = (params['dias'] * params['calor_especifico_kj_kg_k'] * flow
                   * (params['temperatura_acs_c'] - params['temperatura_agua_fria_c']) / 3600)
         monthly = {m:as_num(s[m],'solar.'+m,minimum=0) for m in SOLAR_MONTHS}
@@ -758,7 +765,8 @@ def solar_candidate(generators, systems, general, envelope_changes=False):
         require(math.isfinite(demand) and math.isfinite(production),'E_SOLAR_SCOPE','Balance anual no finito')
         require(0<production<=demand,'E_SOLAR_SCOPE','Produccion nula o superior a la demanda anual; caso no validado')
         return {'percent':production/demand*100,'production':production,'demand':demand,
-                'entrada': {'parametros': dict(params), 'produccion_mensual_kwh': monthly, 'potencia_original': power},
+                'experimental': (zone, area, flow) != ('D2', 100, 100) or extra_area not in (None, area),
+                'entrada': {'parametros':params, 'produccion_mensual_kwh': monthly, 'potencia_original': power},
                 'formula': '100 * suma(produccion_mensual_kwh) / demanda_acs_anual_kwh',
                 'evidencia': 'docs/VALIDACION_SOLAR.md'},''
     except (ConversionError,KeyError,TypeError,IndexError) as exc:
@@ -772,6 +780,7 @@ def neutral_legacy_protection(values):
 
 def window_protection_issues(source):
     indices=[]
+    factors = []
     for i,w in enumerate(source[3][1]):
         values=w.state.get('elementosProteccionSolar')
         if not isinstance(values,list) or len(values)!=28 or all(empty(v) for v in values[25:]):continue
@@ -786,14 +795,24 @@ def window_protection_issues(source):
             require(field in w.state,'E_ACTIVE_SOLAR','Falta un factor solar necesario para omitir la proteccion',f'huecos[{i}].{field}')
             as_num(w.state[field],f'huecos[{i}].{field}',minimum=0)
         indices.append(i)
+        values = [as_num(w.state[key],f'huecos[{i}].{key}')
+                  for key in ('correctorFSCTE','correctorFSInvierno','correctorFSVerano')]
+        if tail == [True, 'Manuales', 'Blanco'] and w.state['tieneProteccionSolar'] and all(v <= 1 for v in values):
+            factors.append(dict(zip(('CTE','invierno','verano'), values), hueco=w.state['descripcion']))
     if not indices:return []
     require(not source[5],'E_ACTIVE_SOLAR','Protecciones nuevas con medidas de mejora: falta contrastar sus copias y referencias')
     active=sum(source[3][1][i].state['tieneProteccionSolar'] for i in indices)
     names=', '.join(str(source[3][1][i].state.get('descripcion',i+1)) for i in indices)
+    candidate = {'experimental': True, 'factores': factors} if len(factors) == len(indices) else None
+    experiment = ('ADAPTACION EXPERIMENTAL: sustituye solo la persiana manual blanca por Otros. '
+                  'Conserva los dos factores estacionales. El corrector CTE pasa a 1 y se pierde el dispositivo. '
+                  'Valores originales (CTE, invierno, verano): ' +
+                  '; '.join(f"{v['hueco']}: {v['CTE']}, {v['invierno']}, {v['verano']}" for v in factors)
+                  + '. Recalcular y revisar en CE3X 2.3.') if candidate else None
     return [{'id':'window-protection:building','kind':'window_protection','name':'Protecciones solares nuevas en huecos',
-             'context':'edificio','candidate':None,'window_indices':indices,
+             'context':'edificio','candidate':candidate,'window_indices':indices,'experimental_message':experiment,
              'message':f'{len(indices)} huecos tienen configuracion adicional de proteccion solar 3.2 ({active} con la proteccion activada): '+names+'. '
-                       'CE3X 2.3 no tiene estos tres campos. No se ofrece una equivalencia calculada. '
+                       'CE3X 2.3 no tiene estos tres campos. '
                        'Omitir elimina SOLO esta proteccion nueva, conserva las ventanas, sus propiedades y los puentes termicos, '
                        'y restablece a 1 los factores solares al no quedar otra proteccion definida. '
                        'Puede cambiar la demanda de refrigeracion. Revisa y recalcula en CE3X 2.3. '
@@ -828,7 +847,10 @@ def solar_issues(source):
                 desc+=(f"Produccion {candidate['production']:.6g} kWh/ano y demanda ACS {candidate['demand']:.6g} kWh/ano. "
                        f"Se propone cobertura ACS "
                        f"{candidate['percent']:.8g} %. Se pierden reparto mensual y potencia solar. "
-                       'Adaptacion ensayada solo con ACS electrico sin acumulacion, zona D2. ')
+                       f"Zona {general[4]}, {general[9]} L/dia, temperatura de red "
+                       f"{candidate['entrada']['parametros']['temperatura_agua_fria_c']} C. ")
+                if candidate['experimental']:
+                    desc+='ADAPTACION EXPERIMENTAL: balance anual sin equivalencia energetica completa. '
             else:desc+='Adaptacion no validada: '+reason+'. '
             desc+=('Omitir elimina esta instalacion solar de la salida. ' if context=='edificio' else
                    'Omitir elimina TODO este conjunto de mejora, incluidos sus costes y otras actuaciones. ')
@@ -891,18 +913,32 @@ def resolve_solar(source, choices, audit, manifest, issues, profile):
         if choice is None:
             manifest['pending_solar']=issue
             raise ConversionError('E_SOLAR_DECISION',issue['message'],issue['id'])
-        require(choice in ('adapt','omit'),'E_SOLAR_DECISION','Decision solar desconocida')
-        require(choice!='adapt' or issue['candidate'] is not None,'E_SOLAR_SCOPE','Esta adaptacion no esta validada')
+        require(choice in ('adapt','experimental','omit'),'E_SOLAR_DECISION','Decision solar desconocida')
+        candidate = issue['candidate']
+        require(choice == 'omit' or candidate is not None and
+                (choice == 'experimental') == candidate['experimental'],
+                'E_SOLAR_SCOPE','Esta adaptacion requiere su modalidad de consentimiento explicita')
     if not issues:return source
     out=copy.deepcopy(source)
     for issue in issues:
         if issue.get('kind')!='window_protection':continue
-        require(choices[issue['id']]=='omit','E_SOLAR_SCOPE','Esta proteccion solo admite omision explicita o cancelar')
+        experimental = choices[issue['id']] == 'experimental'
         for i in issue['window_indices']:
             state=out[3][1][i].state;path=f'huecos[{i}]'
             audit.omit(path+'.elementosProteccionSolar[25:]',state['elementosProteccionSolar'][25:],
-                       'Omision explicitamente aceptada de la proteccion solar nueva')
+                       'Retirada explicitamente aceptada de los campos nativos de persiana')
             state['elementosProteccionSolar'][25:]=[False,'','']
+            if experimental:
+                protection = state['elementosProteccionSolar']
+                user_factors = [format(as_num(state[key], path+'.'+key), '.15g')
+                                for key in ('correctorFSInvierno','correctorFSVerano')]
+                audit.change('EXPERIMENTAL_WINDOW_PROTECTION',path+'.elementosProteccionSolar[23:25]',
+                             protection[23:25],[True,user_factors],'Formato Otros de CE3X 2.3')
+                audit.change('EXPERIMENTAL_WINDOW_PROTECTION',path+'.correctorFSCTE',state['correctorFSCTE'],1.0,
+                             'Factor CTE observado en Otros con una proteccion aislada')
+                protection[23:25]=[True,user_factors]
+                state['correctorFSCTE']=1.0
+                continue
             for key,value in [('tieneProteccionSolar',False),('correctorFSCTE',1.0),('correctorFSInvierno',1.0),('correctorFSVerano',1.0)]:
                 audit.change('OMIT_WINDOW_PROTECTION',path+'.'+key,state[key],value,
                              'Sin otra proteccion solar ni patron de sombras en el hueco')
@@ -923,7 +959,7 @@ def resolve_solar(source, choices, audit, manifest, issues, profile):
                     'Generador termosolar compartido con un contexto distinto', item['context'])
             require(typed_value(g) == item['signature'], 'E_SOLAR_SCHEMA',
                     'Copia de generador termosolar con valores distintos', item['context'])
-            if choices[key]=='adapt' and (id(rows),key) not in added:
+            if choices[key] in ('adapt','experimental') and (id(rows),key) not in added:
                 new=row(item)
                 require(all(r[0]!=new[0] for r in rows),'E_SOLAR_SCHEMA','Nombre de contribucion duplicado')
                 rows.append(new);added.add((id(rows),key))
@@ -962,12 +998,13 @@ def resolve_solar(source, choices, audit, manifest, issues, profile):
         remove_solar_measures(out, removed_indices, audit)
     for issue in issues:
         choice=choices[issue['id']]
+        message = (issue.get('experimental_message') or issue['message']) if choice == 'experimental' else issue['message']
         audit.omit(issue['context']+'.solar', issue,
                    'Proteccion solar nueva' if issue.get('kind') == 'window_protection' else 'Instalacion termosolar mensual',
-                   risk='modelo', operation='adaptar' if choice=='adapt' else 'omitir',
+                   risk='modelo', operation={'adapt':'adaptar','experimental':'adaptar experimentalmente','omit':'omitir'}[choice],
                    element=issue['name'], count=len(issue.get('window_indices',[None])),
-                   dependencies=issue['message'])
-        audit.event('WARNING','W_SOLAR_'+choice.upper(),issue['message'],choice=choice)
+                   dependencies=message)
+        audit.event('WARNING','W_SOLAR_'+choice.upper(),message,choice=choice)
     manifest['results_require_recalculation']=True
     return out
 
@@ -1286,9 +1323,11 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
         require(consent is None or not undecided and consent == token and audit.losses,
                 'E_CONSENT_CHANGED', 'El plan autorizado no coincide. Vuelve a analizar el archivo.')
         if audit.losses and consent is None:
-            first_option = 'apply' if 'adapt' in choices.values() else 'omit'
+            first_option = 'apply' if any(value != 'omit' for value in choices.values()) else 'omit'
             options = {first_option: {'token': token, 'choices': choices, 'losses': audit.losses}}
-            adapt_choices = {**choices, **{issue['id']: 'adapt' for issue in undecided if issue['candidate']}}
+            adapt_choices = {**choices, **{issue['id']: 'experimental' if issue['candidate']['experimental'] else 'adapt'
+                                          for issue in undecided if issue['candidate']}}
+            adaptation = 'experimental' if 'experimental' in adapt_choices.values() else 'adapt'
             if adapt_choices != choices:
                 adapt_audit = Audit()
                 try:
@@ -1296,12 +1335,13 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
                 except ConversionError as exc:
                     audit.event('WARNING', 'W_ADAPT_BLOCKED', str(exc), path=exc.path)
                 else:
-                    options['adapt'] = {'token': consent_token(manifest, adapt_choices, adapt_audit.losses),
-                                        'choices': adapt_choices, 'losses': adapt_audit.losses}
+                    options[adaptation] = {'token': consent_token(manifest, adapt_choices, adapt_audit.losses),
+                                           'choices': adapt_choices, 'losses': adapt_audit.losses}
             title = 'Omitir lo indicado y convertir' if first_option == 'omit' else 'Aplicar las decisiones indicadas'
             message = title + '\n' + describe_losses(audit.losses)
-            if 'adapt' in options:
-                message += '\n\nAdaptar y convertir (incluye estas perdidas)\n' + describe_losses(options['adapt']['losses'])
+            if adaptation in options:
+                title = 'Adaptacion experimental' if adaptation == 'experimental' else 'Adaptar y convertir'
+                message += '\n\n'+title+' (incluye estas perdidas)\n' + describe_losses(options[adaptation]['losses'])
             message += '\n\nEl certificado puede cambiar. Revisa y recalcula en CE3X 2.3. Cancelar conserva todos los archivos.'
             issue_id = issues[0]['id'] if len(issues) == 1 else 'plan:'+token[:16]
             manifest['pending_plan'] = {'id': issue_id, 'options': options}
@@ -1336,7 +1376,9 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
         audit.event('INFO', 'ROUNDTRIP_OK', '15 bloques releidos; clases, acentos, valores y tipos conservados')
         status, exit_code = ('CONVERSION_CON_OMISIONES' if audit.losses else 'REVISAR'), 0
         if manifest.get('solar_decisions'):
-            actions=['Adaptado: '+x['name'] if x['choice']=='adapt' else 'Omitido: '+x['context']+' / '+x['name'] for x in manifest['solar_decisions']]
+            labels = {'adapt':'Adaptado: ', 'experimental':'Adaptado experimentalmente: ', 'omit':'Omitido: '}
+            actions=[labels[x['choice']]+(x['context']+' / ' if x['choice']=='omit' else '')+x['name']
+                     for x in manifest['solar_decisions']]
             manifest['decision_summary']='; '.join(actions)
         attempt.summary = (f'Archivo generado. {len(dst[3][0])} cerramientos, {len(dst[3][1])} huecos, '
                            f'{len(dst[3][2])} puentes y {len(dst[5])} conjuntos de mejora. '
@@ -1408,7 +1450,8 @@ def serve(stream_in=None, stream_out=None):
                                           consent=selected['token'])
                 if code==2:
                     plan=last_attempt.manifest['pending_plan']
-                    if not reply('DECISION_ADAPT' if 'adapt' in plan['options'] else 'DECISION_OMIT',
+                    decision = next((key for key in ('experimental','adapt','omit') if key in plan['options']), 'omit')
+                    if not reply('DECISION_'+decision.upper(),
                                  plan['id'],last_attempt.manifest['error_message']):
                         pending=None
                 else:
@@ -1460,7 +1503,7 @@ def main(argv=None):
     p.add_argument('--template', default=str(ROOT / 'plantilla_23.cex'))
     p.add_argument('--profile')
     p.add_argument('--overwrite', action='store_true', help='Sustituir expresamente una salida existente')
-    p.add_argument('--solar-choice', action='append', default=[], metavar='ID=adapt|omit', help='Decision explicita para cada generador indicado por el analisis previo')
+    p.add_argument('--solar-choice', action='append', default=[], metavar='ID=adapt|experimental|omit', help='Decision explicita para cada generador indicado por el analisis previo')
     p.add_argument('--consent', metavar='TOKEN', help='Autorizar el plan exacto mostrado en el analisis previo')
     p.add_argument('--diagnostic', help='Guardar un ZIP de diagnostico expresamente en esta ruta')
     p.add_argument('--fix-accents', action='store_true', default=True, help=argparse.SUPPRESS)

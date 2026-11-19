@@ -1,6 +1,6 @@
 # Equivalencias y límites de conversión
 
-Los criterios y cambios de la sesión 2 se incorporan a la versión 1.5.3. Para atribuir una diferencia al conversor hacen falta tres resultados. Se comparan primero los modelos nativos 3.2 y 2.3 de la misma configuración. Después se compara el 2.3 convertido con la referencia nativa 2.3. El banco local genera las diferencias absolutas y relativas para magnitudes con igual unidad. Cuando la base es cero, informa solo de la diferencia absoluta. [Matriz](MATRIZ_COMPATIBILIDAD.md) · [Banco local](VALIDACION_REAL.md)
+La versión 1.5.3 incorpora la evidencia de las sesiones originales. Las extensiones experimentales descritas aquí están en desarrollo. Para atribuir una diferencia al conversor hacen falta tres resultados. Se comparan primero los modelos nativos 3.2 y 2.3 de la misma configuración. Después se compara el 2.3 convertido con la referencia nativa 2.3. El banco local genera las diferencias absolutas y relativas para magnitudes con igual unidad. Cuando la base es cero, informa solo de la diferencia absoluta. [Matriz](MATRIZ_COMPATIBILIDAD.md) · [Banco local](VALIDACION_REAL.md)
 
 ## Persianas de huecos
 
@@ -19,19 +19,28 @@ Se introdujeron esos dos correctores estacionales con **Otros** directamente en 
 | Emisiones, kgCO₂/m²·año | 39,75 | 39,75 |
 | Calificación global de emisiones | E | E |
 
-En esta vivienda los indicadores coinciden a la precisión publicada por el XML. Esa coincidencia tiene un alcance distinto al de conservar el factor CTE. La batería final contrastó el control sin persiana en ambas versiones y la salida con omisión en 2.3. Faltan ensayos con sombra combinada y mejoras. La opción de adaptación sigue deshabilitada. La omisión aislada exige consentimiento y restablece los factores a 1. El CEX 3.2 del ensayo conservó su hash durante la conversión. [Factores, resultados y hashes](../fuentes/fixtures/persiana_ce3x.json) · [Batería final](INFORME_VALIDACION_FINAL.md)
+En esta vivienda los indicadores coinciden a la precisión publicada por el XML. Esa coincidencia tiene un alcance distinto al de conservar el factor CTE. La batería final contrastó el control sin persiana en ambas versiones y la salida con omisión en 2.3. Faltan ensayos con sombra combinada y mejoras. La **adaptación experimental** de una persiana manual blanca aislada y activa escribe los factores estacionales en `Otros` si los tres correctores están entre 0 y 1. El factor CTE toma el valor nativo 1 y se pierden el dispositivo y su color. La salida convertida se abrió, recalculó, guardó y exportó en CE3X 2.3. Los tres correctores guardados y las 62 magnitudes comparables extraídas del XML coincidieron con la referencia nativa 2.3. La omisión aislada exige consentimiento y restablece los factores a 1. El CEX 3.2 del ensayo conservó su hash durante la conversión. [Factores, resultados y hashes](../fuentes/fixtures/persiana_ce3x.json) · [Batería final](INFORME_VALIDACION_FINAL.md)
 
 ## Termosolar mensual para ACS
 
-La adaptación anual queda ceñida al modelo medido. La opción exige 100 m², 100 L/día de ACS, zona D2, un solo equipo eléctrico de efecto Joule, rendimiento y cobertura del 100 %, sin acumulación ni otras instalaciones o contribuciones declaradas. Si el proyecto declara una segunda superficie, debe coincidir con la común. Los valores de depósito presentes pese al indicador de acumulación desactivado también dejan el caso fuera del ensayo. Fuera de ese alcance, la omisión consentida se mantiene donde las dependencias lo permiten.
+En ambos ejecutables instalados se ejecutó `Calculos.funcionesCalculo.getDiccionarioTemperaturasAguaRedACS()`. La tabla coincide entre las dos versiones y, para A3, A4, B3, B4, C1, C2, C3, C4, D1, D2, D3 y E1, coincide también entre las variantes peninsular y extrapeninsular. La selección territorial para las claves exclusivas queda pendiente.
 
 ```text
 producción_anual [kWh/año] = suma(producción_mensual)
-demanda_ACS [kWh/año] = 360 × 4,18 × 100 × (60 − 11,7) / 3600 = 2018,94
+demanda_ACS [kWh/año] = 360 × 1 kg/L × 4,18 kJ/(kg·K) × litros_ACS_día × (60 °C − T_red_zona) / 3600
 cobertura_2.3 [%] = 100 × producción_anual / demanda_ACS
 ```
 
-El diagnóstico incluye los doce valores de entrada, la potencia declarada, los parámetros de cálculo, la fórmula y la fuente de evidencia. El formato 2.3 conserva la cobertura anual calculada y pierde el reparto mensual, la potencia y el identificador del generador. Producciones nulas, no finitas o superiores a la demanda quedan fuera del cálculo. Las pruebas verifican la cobertura calculada y serializada con los cuatro perfiles del ensayo. La comparación energética usa la precisión publicada por los XML, con consumos finales de ACS de 6,06 o 18,33 kWh/m²·año según el caso. [Resultados originales](VALIDACION_SOLAR.md) · [Fixture D2](../fuentes/fixtures/solar_d2_ensayos.json)
+La superficie del CEX solo se usa para verificar que el área cubierta concuerda con el 100 % declarado. El ensayo histórico D2 de 100 m², 100 L/día y 11,7 °C conserva la opción contrastada. Los demás casos admitidos llevan aceptación experimental explícita. Se exige un equipo eléctrico de efecto Joule conocido, rendimiento y cobertura del 100 %, sin acumulación, consumos mensuales separados ni otras aportaciones. Las mejoras combinadas con envolvente quedan fuera de la adaptación. Producciones nulas, no finitas o superiores a la demanda se rechazan para adaptar. La salida pierde meses, potencia e identificador del generador. El diagnóstico registra fórmula, parámetros y decisión.
+
+Las regresiones prueban D1, D2 y C3 con superficies, volúmenes y temperaturas distintos. `scripts/sondar_temperaturas_acs.py` reproduce la extracción con `probe_python27`. `scripts/preparar_ensayo_acs.py` prepara las parejas D1 y D2 para abrir y exportar desde los dos programas.
+
+| Caso | Superficie (m²) | ACS (L/día) | Producción (kWh/año) | Demanda ACS (kWh/m²·año) | ACS final eléctrico (kWh/m²·año) | Primaria ACS no renovable (kWh/m²·año) | Emisiones ACS (kg CO₂/m²·año) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| D1 | 150 | 112 | 480 | 15,23 | 12,03 | 23,51 | 3,98 |
+| D2 | 85 | 75 | 744 | 17,81 | 9,06 | 17,71 | 3,00 |
+
+Los cuatro CEX se abrieron, recalcularon, guardaron y exportaron en sus respectivas versiones. Las cifras de la tabla coinciden entre los dos motores al centésimo. En 2.3 se usa el indicador por vector de electricidad peninsular y en 3.2 el total de ACS, que en estos ensayos solo tiene un equipo y vector. Los consumos finales coinciden también con el balance proyectado. Para exportar en 3.2 se completaron las plantas y la potencia de ACS. CE3X 3.2 generó ambos XML con avisos de validación de esquema en `Sistemas` e `Id`; D2 además exportó `Parcela` como `None`. Los indicadores se pudieron extraer. La comparación respalda estos dos casos energéticos y la adaptación general sigue siendo experimental. [Ensayo histórico](VALIDACION_SOLAR.md) · [Fixture D2](../fuentes/fixtures/solar_d2_ensayos.json)
 
 ## Generación eléctrica, instalaciones y ventilación
 
@@ -43,4 +52,4 @@ El diagnóstico incluye los doce valores de entrada, la potencia declarada, los 
 | Ventilación o ventiladores activos | El diagnóstico identifica el equipo y la necesidad de contrastar caudal, recuperación y consumo en 2.3 residencial. Se conserva el bloqueo. |
 | Mejoras combinadas | Se conservan tipos, equipos y costes contrastados. Las copias discordantes, los generadores activos sin equivalencia y las protecciones con dependencias sin validar se bloquean. Cuando una omisión termosolar retira una mejora, elimina el conjunto y las referencias comprobadas tras consentimiento. |
 
-Las aproximaciones de producción mensual a autoconsumo anual, de recuperador a descuento genérico y de factores de persiana a correcciones equivalentes siguen como hipótesis de ensayo. El cálculo sin interfaz de `datosEdificio.calificacion` no reprodujo los resultados de control de la sesión 1. Para la evidencia energética de esta sesión se utilizan únicamente exportaciones de la aplicación completa y los ensayos nativos ya documentados.
+El panel mensual 3.2 distingue el cálculo de la generación total del autoconsumo en servicios EPBD. El panel anual de ambos motores identifica su campo como generación eléctrica para autoconsumo. Falta comprobar el significado de cada campo serializado y el cómputo nativo de 2.3 con excedentes. Los paneles de ventilación de ambos motores exponen caudal y recuperador. Falta comprobar su uso real en residencial y dónde se contabiliza la electricidad auxiliar. Se mantienen los bloqueos.

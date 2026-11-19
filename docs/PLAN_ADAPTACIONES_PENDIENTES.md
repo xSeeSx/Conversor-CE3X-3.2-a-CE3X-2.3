@@ -4,6 +4,8 @@ Documento de trabajo para Codex. **No describe funcionalidades ya disponibles.**
 
 **Fórmulas físicas, ejemplos numéricos y pruebas preparadas:** [docs/FORMULAS_EQUIVALENCIAS_PENDIENTES.md](FORMULAS_EQUIVALENCIAS_PENDIENTES.md). Contiene recuperación sensible/entálpica, ventiladores, fotovoltaica mensual, persianas y ACS solar. Úsalo para evitar rehacer investigación; no habilites equivalencias sin prueba en CE3X 2.3.
 
+**Avance:** se generalizó la solar térmica con consentimiento experimental y contraste en D1 y D2. Una persiana manual blanca aislada se puede representar experimentalmente como «Otros», con cambio explícito del factor CTE. Fotovoltaica mensual, ventilación con recuperación, mejoras combinadas y otros equipos o acumuladores siguen pendientes de evidencia nativa. [Detalle de ensayos y límites](EQUIVALENCIAS_Y_LIMITES.md)
+
 ## P0 - Generalizar la adaptación de solar térmica mensual a ACS
 
 **Problema actual (motor 1.5.3):** `solar_candidate()` en `app/converter.py` exige literalmente zona `D2`, superficie de `100 m²`, ACS de `100 L/día`, un único equipo eléctrico por efecto Joule con 100 % de rendimiento y cobertura, y ausencia de acumulación y otras instalaciones. Estas eran las condiciones del **ensayo**, no reglas universales de conversión. En un certificado corriente se impide adaptar aunque los datos sean perfectamente reconocibles.
