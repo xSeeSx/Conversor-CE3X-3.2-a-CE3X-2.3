@@ -4,11 +4,11 @@ Conversor experimental de archivos `.cex` residenciales de CE3X 3.2 a CE3X 2.3 p
 
 ## Descargar
 
-[**Descargar para Windows, versión 1.5.3**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/download/v1.5.3/Conversor_CE3X_Windows_1_5_3.zip)
+[**Descargar la última versión publicada para Windows**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/latest)
 
 [Releases y notas de cada versión](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases) · [Historial de cambios](CHANGELOG.md)
 
-El ZIP incluye el ejecutable y Python. En Releases, descarga `Conversor_CE3X_Windows_1_5_3.zip`. Los archivos **Source code** contienen los fuentes.
+El ZIP incluye el ejecutable y Python. En Releases, descarga el archivo `Conversor_CE3X_Windows_*.zip`. Los archivos **Source code** contienen los fuentes.
 
 ## Cómo usar la versión publicada
 
@@ -67,7 +67,7 @@ OtroInvierno_2.3 = correctorFSInvierno_3.2
 OtroVerano_2.3   = correctorFSVerano_3.2
 ```
 
-**No se aplica automáticamente:** faltan controles sin persiana, combinaciones con sombras y mejoras, y validación del factor CTE. No se debe conservar ni inventar `correctorFSCTE` como si ambos programas lo calcularan igual. [Ensayo y discrepancia](docs/EQUIVALENCIAS_Y_LIMITES.md#persianas-de-huecos).
+El control sin persiana y la omisión dieron el mismo XML en la batería final de 2.3. La adaptación a **Otros** sigue deshabilitada por la discrepancia del factor CTE. Faltan ensayos con sombras y mejoras combinadas. [Ensayo y discrepancia](docs/EQUIVALENCIAS_Y_LIMITES.md#persianas-de-huecos) · [Validación de la omisión](docs/INFORME_VALIDACION_FINAL.md)
 
 ### Generación fotovoltaica mensual a contribución anual (criterio candidato, no implementado)
 

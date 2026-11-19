@@ -19,7 +19,7 @@ Se introdujeron esos dos correctores estacionales con **Otros** directamente en 
 | Emisiones, kgCO₂/m²·año | 39,75 | 39,75 |
 | Calificación global de emisiones | E | E |
 
-En esta vivienda los indicadores coinciden a la precisión publicada por el XML. Esa coincidencia tiene un alcance distinto al de conservar el factor CTE. Faltan los controles recalculados sin dispositivo y los ensayos con sombra combinada y mejoras. La opción de adaptación sigue deshabilitada. La omisión aislada exige consentimiento y restablece los factores a 1. Se verificó el flujo con el CEX 3.2 del ensayo y se comprobó que el archivo de origen conservaba su hash. [Factores, resultados y hashes](../fuentes/fixtures/persiana_ce3x.json)
+En esta vivienda los indicadores coinciden a la precisión publicada por el XML. Esa coincidencia tiene un alcance distinto al de conservar el factor CTE. La batería final contrastó el control sin persiana en ambas versiones y la salida con omisión en 2.3. Faltan ensayos con sombra combinada y mejoras. La opción de adaptación sigue deshabilitada. La omisión aislada exige consentimiento y restablece los factores a 1. El CEX 3.2 del ensayo conservó su hash durante la conversión. [Factores, resultados y hashes](../fuentes/fixtures/persiana_ce3x.json) · [Batería final](INFORME_VALIDACION_FINAL.md)
 
 ## Termosolar mensual para ACS
 
