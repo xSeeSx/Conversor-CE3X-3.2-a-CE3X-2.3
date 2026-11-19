@@ -1,8 +1,8 @@
 # Adaptaciones pendientes CE3X 3.2 → 2.3
 
-Documento de trabajo para Codex. **No describe funcionalidades ya disponibles.** Priorizar el uso del banco local y los ejecutables CE3X 2.3 y 3.2 instalados. Cada equivalencia requiere evidencia nativa y pruebas de regresión. No hacer promesas de compatibilidad sin validación.
+Plan técnico de mantenimiento y desarrollo. **No describe funcionalidades ya disponibles.** Priorizar el uso del banco local y los ejecutables CE3X 2.3 y 3.2 instalados. Cada equivalencia requiere evidencia nativa y pruebas de regresión. No hacer promesas de compatibilidad sin validación.
 
-**Investigación eficiente:** priorizar documentación oficial y las reglas/fórmulas ya publicadas antes de abrir CE3X o diseñar ensayos. Implementar funciones generales en código y probar por algoritmo, no por color o zona. Hacer ensayos nativos solo cuando una correspondencia, una interpretación energética o el formato de destino no estén acreditados; reutilizar los ensayos existentes. Consultar la metodología obligatoria de `AGENTS.md`.
+**Investigación eficiente:** priorizar documentación oficial y las reglas/fórmulas ya publicadas antes de abrir CE3X o diseñar ensayos. Implementar funciones generales en código y probar por algoritmo, no por color o zona. Hacer ensayos nativos solo cuando una correspondencia, una interpretación energética o el formato de destino no estén acreditados; reutilizar los ensayos existentes. Seguir las directrices de desarrollo del repositorio.
 
 **Control de cobertura obligatorio:** [docs/COBERTURA_VARIANTES.md](COBERTURA_VARIANTES.md). No considerar «adaptada» una categoría entera cuando solo se ha ensayado una variante. Inventariar subtipos, opciones, condiciones y resultados por combinación relevante antes de cerrar cada prioridad.
 
@@ -85,7 +85,7 @@ Estas son las situaciones que el usuario debe poder distinguir **antes** de conv
 | Ventilación con recuperador | Separar el efecto en demanda térmica del consumo eléctrico de ventiladores. No reemplazarlos por un porcentaje genérico no comprobado. |
 | Medidas de mejora con elementos nuevos | Mantener cerramientos, instalaciones, vínculos y costes. Si se retira una actuación por consentimiento, detallar exactamente qué conjunto y referencias desaparecen. |
 
-### Entregables y comprobaciones de Codex
+### Entregables y comprobaciones
 
 - [ ] **P0** funciona en archivos de prueba con **al menos dos zonas climáticas**, varias demandas diarias de ACS y superficies distintas, sin dependencia de constantes del ejemplo.
 - [ ] Se prueba **abrir, recalcular, guardar y exportar XML** en CE3X 2.3 para cada nueva equivalencia habilitada y se comparan los resultados con un modelo nativo equivalente, diferenciando discrepancias del propio motor.
@@ -98,4 +98,4 @@ Estas son las situaciones que el usuario debe poder distinguir **antes** de conv
 - Primero P0. Reutilizar `scripts/validar_bateria_final.py` y las pruebas locales; evitar interacciones gráficas repetitivas.
 - No modificar a ciegas las fórmulas de certificación. Obtener primero el método y un caso de referencia.
 - Hacer commits por hito, registrar las pruebas y no publicar nueva versión sin integración Windows y evidencia de los nuevos casos.
-- Mantener este documento como backlog técnico de Codex y conservar el README público sintetizado. No enlazar este plan de agentes desde el README.
+- Mantener este documento como registro técnico de pendientes y conservar el README público sintetizado. No duplicar el plan interno en el README.
