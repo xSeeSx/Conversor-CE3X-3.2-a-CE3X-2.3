@@ -27,6 +27,62 @@ Conserva las carpetas del paquete junto al ejecutable. El `.exe` suelto no funci
 
 Los originales se conservan y el trabajo se realiza localmente. Si ya existe una salida con ese nombre, se pide confirmación antes de sustituirla.
 
+## Funcionalidades nuevas de 3.2 todavía no adaptadas
+
+La siguiente tabla distingue **adaptar**, **omitir con consentimiento** y **bloquear**. Es el estado del conversor, no una afirmación de que CE3X 2.3 carezca de todos esos elementos. El código de desarrollo en `main` puede ir por delante de la [última release publicada](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases).
+
+| Funcionalidad de origen 3.2 | Estado actual | Consecuencia para el usuario |
+| --- | --- | --- |
+| Persianas nuevas de huecos (tres campos adicionales) | **No adaptadas** | Solo se pueden omitir, con consentimiento, cuando no están combinadas con otras protecciones, sombras o mejoras; se restablecen los factores solares a 1. En las demás combinaciones se bloquea. |
+| Solar térmica con producción mensual | **Adaptación muy limitada** | Solo se adapta a porcentaje anual de ACS en el [ensayo D2 documentado](docs/EQUIVALENCIAS_Y_LIMITES.md#termosolar-mensual-para-acs). En otros casos conocidos puede ofrecer omisión consentida; si hay dependencias inseguras, bloquea. |
+| Generadores eléctricos con producción mensual | **Sin equivalencia validada** | Bloquea. Falta identificar el autoconsumo correspondiente a servicios computables, distinto de la generación total. |
+| Ventilación y ventiladores activos en residencial, incluida recuperación de calor | **Sin equivalencia validada** | Bloquea. No se sustituye el efecto térmico y eléctrico por un descuento genérico. |
+| Instalaciones nuevas, acumulación y campos adicionales de equipos | **Según estructura contrastada** | Conserva datos comunes; determinadas colas adicionales pueden retirarse con consentimiento. Estructuras activas desconocidas bloquean. |
+| Mejoras que incluyen generadores nuevos o protecciones no contrastadas | **Según dependencias** | Bloquea o, cuando está documentado y se autoriza, retira la mejora y las referencias asociadas; no elimina componentes en silencio. |
+
+Los cerramientos de las diez tipologías, las particiones interiores y los huecos convencionales tienen reglas de conservación. Para el inventario completo de campos y variantes, consulta la [matriz de compatibilidad](docs/MATRIZ_COMPATIBILIDAD.md) y el [inventario de omisiones](docs/OMISIONES_1_5_2.md).
+
+## Criterios y fórmulas de adaptación
+
+**Regla general:** una equivalencia numérica no basta por sí sola. Se comprueba primero con dos modelos nativos comparables, uno en CE3X 3.2 y otro en 2.3; después se contrasta el archivo convertido con el modelo nativo 2.3. Los cálculos solo se habilitan en las condiciones efectivamente ensayadas. Cuando no se conoce una equivalencia, se bloquea o se solicita consentimiento para una omisión segura.
+
+### Solar térmica mensual a cobertura anual de ACS (implementada únicamente en el ensayo D2)
+
+```text
+Q_solar_anual [kWh/año] = suma(Q_solar_mes[m], m=1..12)
+D_ACS [kWh/año] = 360 × 4,18 × 100 × (60 - 11,7) / 3600 = 2.018,94
+Cobertura_ACS_2.3 [%] = 100 × Q_solar_anual / D_ACS
+```
+
+**Condiciones del ensayo:** zona D2, 100 m², 100 L/día de ACS, un equipo eléctrico de efecto Joule con rendimiento y cobertura del 100 %, sin acumulación ni otras instalaciones o contribuciones. La producción debe ser positiva y no superar la demanda calculada. Esta fórmula **no es una regla general para cualquier edificio**. Se conservan los valores energéticos anuales ensayados, pero se pierden el reparto mensual y la potencia de la instalación. [Datos y resultados del ensayo](docs/VALIDACION_SOLAR.md).
+
+### Persianas de 3.2 a «Otros» en 2.3 (hipótesis, no implementada)
+
+En un ensayo de persiana manual blanca, CE3X 3.2 guardó `correctorFSInvierno = 1`, `correctorFSVerano = 0,345` y `correctorFSCTE = 0,345`. Introducir **Otros** en CE3X 2.3 con `OtroInvierno = 1` y `OtroVerano = 0,345` produjo los mismos indicadores energéticos **en esa vivienda y a la precisión exportada**, pero el archivo 2.3 guardó `correctorFSCTE = 1`, no 0,345.
+
+La correspondencia candidata es:
+
+```text
+OtroInvierno_2.3 = correctorFSInvierno_3.2
+OtroVerano_2.3   = correctorFSVerano_3.2
+```
+
+**No se aplica automáticamente:** faltan controles sin persiana, combinaciones con sombras y mejoras, y validación del factor CTE. No se debe conservar ni inventar `correctorFSCTE` como si ambos programas lo calcularan igual. [Ensayo y discrepancia](docs/EQUIVALENCIAS_Y_LIMITES.md#persianas-de-huecos).
+
+### Generación fotovoltaica mensual a contribución anual (criterio candidato, no implementado)
+
+```text
+E_equivalente_2.3 [kWh/año] = suma(E_autoconsumida_en_servicios_computables_mes[m], m=1..12)
+```
+
+**No equivale a sumar la producción fotovoltaica total.** Antes de automatizarlo hay que verificar qué energía es realmente autoconsumida en los servicios del certificado, cómo trata CE3X 2.3 esa contribución y qué ocurre con los excedentes. Las contribuciones **anuales** que ya tienen formato nativo compatible se conservan sin esta transformación. [Límites actuales](docs/EQUIVALENCIAS_Y_LIMITES.md#generacion-electrica-instalaciones-y-ventilacion).
+
+### Ventilación, recuperadores y otras instalaciones (sin fórmula segura)
+
+No hay una fórmula general validada para convertir caudal, recuperación térmica y consumo de ventiladores en una única reducción anual. Tampoco se deduce el consumo a partir de la potencia nominal de un equipo. Hasta obtener ensayos nativos equivalentes, los sistemas activos sin regla contrastada **se bloquean**, sin adaptar ni omitir silenciosamente.
+
+**Mantenimiento de este apartado:** cada equivalencia nueva debe actualizar su estado, fórmula, unidades, condiciones, evidencia, pérdidas y pruebas. Las instrucciones para agentes de programación están en [AGENTS.md](AGENTS.md).
+
 ## Antes de utilizar el resultado
 
 Es una herramienta experimental, no oficial. El estado **REVISAR** indica comprobaciones estructurales, no validación en CE3X.
