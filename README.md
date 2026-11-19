@@ -18,8 +18,8 @@ El original no se modifica. El resultado se guarda junto a él. La conversión s
 | --- | --- |
 | Cerramientos (10 tipologías), ventanas convencionales, puentes térmicos y sombras | ✅ Se conservan los datos contrastados |
 | Instalaciones habituales, fotovoltaica **anual** y mejoras compatibles con sus costes | ✅ Se conservan los datos contrastados |
-| Solar térmica **mensual** | En desarrollo. Calcula con la zona y los litros del CEX. Fuera del ensayo validado requiere consentimiento experimental |
-| Persianas nuevas | En desarrollo. Opción experimental **Otros** para persianas manuales blancas aisladas. También permite omisión consentida |
+| Solar térmica **mensual** | Calcula con la zona y los litros del CEX. Fuera del ensayo histórico requiere consentimiento experimental |
+| Persianas nuevas | Opción experimental **Otros** para persianas manuales blancas aisladas. También permite omisión consentida |
 | Generación eléctrica **mensual** | ❌ Sin adaptación validada, bloqueo |
 | Ventilación, recuperadores y otros sistemas nuevos activos | ❌ Sin adaptación validada, bloqueo |
 
@@ -27,7 +27,7 @@ El original no se modifica. El resultado se guarda junto a él. La conversión s
 
 ## Criterios y fórmulas de adaptación
 
-La versión publicada **1.5.3** conserva el alcance del ensayo D2 original. Las opciones experimentales de desarrollo requieren consentimiento y recálculo.
+Las opciones experimentales se identifican antes de convertir y requieren consentimiento y recálculo.
 
 ```text
 Demanda_ACS (kWh/año) = 360 × 4,18 × litros_ACS_día × (60 − T_red_zona) / 3600
@@ -46,6 +46,8 @@ La termosolar admite un equipo eléctrico de efecto Joule conocido al 100 %, sin
 ## ¿Está probado?
 
 La **v1.5.3** superó apertura, recálculo, guardado y exportación XML de **seis salidas** en CE3X 2.3, incluidas mejoras y omisiones. Es una herramienta **experimental**, no garantiza compatibilidad universal ni sustituye la revisión del técnico.
+
+Los ensayos adicionales de ACS D1 y D2 comparan ambos motores. La salida convertida de persiana se contrastó con la referencia nativa 2.3.
 
 [Ver pruebas y resultados](docs/INFORME_VALIDACION_FINAL.md) · [Historial de versiones](CHANGELOG.md)
 

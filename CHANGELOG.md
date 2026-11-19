@@ -1,5 +1,11 @@
 # Historial de cambios
 
+## 1.5.4 - 2026-11-19
+
+- Adaptación termosolar de ACS con la zona y el caudal del proyecto. Las configuraciones fuera del ensayo histórico requieren consentimiento experimental. Se contrastaron dos casos adicionales en CE3X 3.2 y 2.3.
+- Opción experimental para una persiana manual blanca aislada mediante **Otros** de 2.3. Conserva los dos factores estacionales e informa del cambio del factor CTE y la pérdida del tipo y color.
+- Diagnóstico previo con consentimiento diferenciado para las adaptaciones experimentales.
+
 ## 1.5.3 - 2026-11-19
 
 - Verificada la apertura, el guardado, el recálculo y la exportación XML de seis salidas en CE3X 2.3. Se añadió una batería reproducible con muestras docentes y sintéticas.
