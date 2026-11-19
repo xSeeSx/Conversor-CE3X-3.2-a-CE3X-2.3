@@ -1,0 +1,66 @@
+name: Publicar versión
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión exacta del motor, sin el prefijo v'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ce3x-publicacion
+  cancel-in-progress: false
+
+jobs:
+  comprobar:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar versión, notas y etiqueta disponible
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          grep -Fx "VERSION = '$VERSION'" app/converter.py
+          python -c 'import json,os; assert json.load(open("app/profile.json"))["profile_version"] == os.environ["VERSION"]'
+          test -s "docs/RELEASE_${VERSION//./_}.md"
+          ref=$(git ls-remote origin "refs/tags/v$VERSION")
+          test -z "$ref"
+
+  windows:
+    needs: comprobar
+    uses: ./.github/workflows/integracion-windows.yml
+
+  publicar:
+    needs: windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Conversor_CE3X_windows
+          path: artifact
+      - name: Publicar el paquete del commit probado
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          test "$head" = "$GITHUB_SHA"
+          ref=$(git ls-remote origin "refs/tags/v$VERSION")
+          test -z "$ref"
+          dir=artifact/_release
+          zip="Conversor_CE3X_Windows_${VERSION//./_}.zip"
+          test -f "$dir/$zip"
+          (cd "$dir" && sha256sum --check --status SHA256SUMS.txt)
+          gh release create "v$VERSION" "$dir/$zip" "$dir/SHA256SUMS.txt" \
+            --target "$GITHUB_SHA" --title "CE3X $VERSION" --notes-file "docs/RELEASE_${VERSION//./_}.md"

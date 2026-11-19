@@ -1,0 +1,172 @@
+name: Integración Windows
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/integracion-windows.yml'
+      - 'fuentes/compilar_windows.ps1'
+      - 'fuentes/probe_python27.c'
+      - 'scripts/inspeccionar_paneles_23.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Pruebas del motor
+        run: python -B -m unittest discover -s fuentes -q
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ce3x_archivos
+          key: ce3x-archivos-windows-zig013-python3119-miteco32-v1
+      - name: Preparar Zig y Python portátil
+        shell: pwsh
+        run: |
+          $cache = Join-Path $env:RUNNER_TEMP 'ce3x_archivos'
+          New-Item -ItemType Directory -Path $cache -Force | Out-Null
+          function Get-VerifiedArchive($name, $url, $sha) {
+            $file = Join-Path $cache $name
+            if (-not (Test-Path $file) -or (Get-FileHash $file).Hash -ine $sha) {
+              Invoke-WebRequest -TimeoutSec 180 $url -OutFile $file
+            }
+            if ((Get-FileHash $file).Hash -ine $sha) { throw "SHA256 incorrecto: $name" }
+            return $file
+          }
+          $zig = Get-VerifiedArchive 'zig.zip' 'https://ziglang.org/download/0.13.0/zig-windows-x86_64-0.13.0.zip' 'd859994725ef9402381e557c60bb57497215682e355204d754ee3df75ee3c158'
+          $python = Get-VerifiedArchive 'python.zip' 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip' '009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b'
+          $official = Get-VerifiedArchive 'CE3Xv3.2.zip' 'https://www.miteco.gob.es/content/dam/miteco/es/energia/eficiencia/certificacionenergetica/documentosreconocidos/procedimientoscertificacion/ce3x/CE3Xv3.2.zip' 'd92bea9f25ebd60c30ef9043ffdd3339fc84065eb415b2629b8a77f948f6b9dd'
+          Expand-Archive $zig "$env:RUNNER_TEMP/zig"
+          Expand-Archive $python runtime
+          (Get-ChildItem "$env:RUNNER_TEMP/zig" -Recurse -Filter zig.exe | Select-Object -First 1).DirectoryName |
+            Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Compilar interfaz nativa
+        shell: pwsh
+        run: ./fuentes/compilar_windows.ps1
+      - uses: actions/cache/restore@v4
+        id: nativecache
+        with:
+          path: ${{ runner.temp }}/ce3x23
+          key: ce3x-native-23-5cb86c17900bb383
+      - name: Inspeccionar paneles nativos CE3X 2.3
+        id: native
+        shell: pwsh
+        run: |
+          $stage23 = Join-Path $env:RUNNER_TEMP 'ce3x23'
+          New-Item -ItemType Directory -Path $stage23 -Force | Out-Null
+          if (-not (Test-Path "$stage23/native")) {
+            Invoke-WebRequest -TimeoutSec 180 'https://www6.serviciosmin.gob.es/aplicaciones/calener/setupCE3Xv2.3.exe' -OutFile "$stage23/setup.exe"
+            if ((Get-FileHash "$stage23/setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant() -ne '5cb86c17900bb383577bb31f78251f22d722db2f185d16d69b4decfef57ae82c') { throw 'Ha cambiado el instalador oficial 2.3.' }
+            Invoke-WebRequest 'https://raw.githubusercontent.com/jrathlev/InnoUnpacker-Windows-GUI/418937d9913c67b9abbe93a2e9e725a06f0f2be7/innounp-2/bin/innounp-2.zip' -OutFile "$stage23/tool.zip"
+            if ((Get-FileHash "$stage23/tool.zip" -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f8e45c9676bebc7d7570108ab572673b541fcf7a7d3d24a04319ac6b5315b4e8') { throw 'SHA incorrecto del extractor.' }
+            Expand-Archive "$stage23/tool.zip" "$stage23/tool"
+            & "$stage23/tool/innounp.exe" -x -m "-d$stage23/native" "$stage23/setup.exe"
+            if ($LASTEXITCODE -ne 0) { throw 'No se pudo extraer CE3X 2.3.' }
+          }
+          'extracted=true' | Out-File $env:GITHUB_OUTPUT -Append
+          $nativeApp = Get-ChildItem "$stage23/native" -Recurse -Filter python27.dll | Select-Object -First 1
+          zig cc -target x86-windows-gnu -O2 fuentes/probe_python27.c -o "$stage23/probe.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la sonda.' }
+          New-Item -ItemType Directory -Path _validacion -Force | Out-Null
+          $env:CE3X_PROBE_OUTPUT = "$pwd/_validacion/paneles_nativos_23.json"
+          $probe = Start-Process -FilePath "$stage23/probe.exe" -ArgumentList @($nativeApp.DirectoryName, "$pwd/scripts/inspeccionar_paneles_23.py") -PassThru -WindowStyle Hidden -RedirectStandardOutput "$pwd/_validacion/probe_stdout.txt" -RedirectStandardError "$pwd/_validacion/probe_stderr.txt"
+          if (-not $probe.WaitForExit(60000)) { Stop-Process -Id $probe.Id; throw 'La sonda nativa ha superado el tiempo limite.' }
+          Get-Content _validacion/probe_stdout.txt
+          Get-Content _validacion/probe_stderr.txt
+          python -c "import json; from pathlib import Path; result=json.loads(Path('_validacion/paneles_nativos_23.json').read_text()); expected=json.loads(Path('app/profile.json').read_text(encoding='utf-8'))['envelope_lengths']; assert len(result)==10 and all('row' in x for x in result), result; actual={x['row'][1]+'|'+x['row'][-1]:x['length'] for x in result}; assert actual==expected, (actual,expected)"
+          if ($LASTEXITCODE -ne 0) { throw 'El catalogo no coincide con las estructuras nativas 2.3.' }
+          if ($probe.ExitCode -ne 0) { throw 'No se pudo ejecutar la sonda nativa.' }
+      - uses: actions/cache/save@v4
+        if: always() && steps.native.outputs.extracted == 'true' && steps.nativecache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/ce3x23
+          key: ce3x-native-23-5cb86c17900bb383
+      - name: Probar Python portátil
+        shell: pwsh
+        run: |
+          ./runtime/python.exe -I -X utf8 -B app/converter.py self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Fallo del motor con Python portatil.' }
+          ./runtime/python.exe -I -X utf8 -B -m unittest discover -s fuentes -q
+          if ($LASTEXITCODE -ne 0) { throw 'Fallo de regresion con Python portatil.' }
+      - name: Probar comunicacion entre interfaz y motor
+        shell: pwsh
+        run: |
+          $resultPath = "$env:RUNNER_TEMP/ce3x_selftest.txt"
+          $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--self-test', $resultPath) -PassThru -Wait -WindowStyle Hidden
+          if ($process.ExitCode -ne 0 -or (Get-Content $resultPath -Raw).Trim() -ne 'OK') {
+            throw 'Fallo de comunicacion entre el ejecutable y Python.'
+          }
+      - name: Probar decisiones desde la interfaz y el motor portatil
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path _validacion -Force | Out-Null
+          python -c "import sys; from pathlib import Path; sys.path.insert(0,'fuentes'); import test_converter as t; x=t.ConverterTests(); x.setUp(); x.solar_fixture(); Path('_validacion/solar_sintetica.cex').write_bytes(t.c.encoded(x.src)); x.tearDown()"
+          if ($LASTEXITCODE -ne 0) { throw 'Fallo al crear la muestra sintetica.' }
+          foreach ($choice in @('adapt','omit','cancel')) {
+            $source = "$pwd/_validacion/solar_$choice.cex"
+            Copy-Item _validacion/solar_sintetica.cex $source
+            $marker = "$pwd/_validacion/decision_$choice.txt"
+            $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--smoke-decision', $source, $choice, $marker) -PassThru -Wait -WindowStyle Hidden
+            if ($process.ExitCode -ne 0 -or (Get-Content $marker -Raw).Trim() -ne 'OK') { throw "Fallo de decision nativa: $choice" }
+            $output = "$pwd/_validacion/solar_${choice}_CE3X2.3.cex"
+            if ($choice -eq 'cancel' -and (Test-Path $output)) { throw 'Cancelar ha generado una salida.' }
+            if ($choice -ne 'cancel' -and -not (Test-Path $output)) { throw 'No se ha generado la salida elegida.' }
+          }
+      - name: Probar aviso y omision de protecciones nuevas
+        shell: pwsh
+        run: |
+          python -c "import sys; from pathlib import Path; sys.path.insert(0,'fuentes'); import test_converter as t; x=t.ConverterTests(); x.setUp(); x.blind_fixture(); x.src[2][22]='200'; x.src[12]['Icaen']='configuracion sintetica'; Path('_validacion/proteccion.cex').write_bytes(t.c.encoded(x.src)); x.tearDown()"
+          foreach ($choice in @('omit','cancel')) {
+            $source = "$pwd/_validacion/proteccion_$choice.cex"
+            Copy-Item _validacion/proteccion.cex $source
+            $marker = "$pwd/_validacion/proteccion_$choice.txt"
+            $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--smoke-decision', $source, $choice, $marker) -PassThru -Wait -WindowStyle Hidden
+            if ($process.ExitCode -ne 0 -or (Get-Content $marker -Raw).Trim() -ne 'OK') { throw "Fallo de proteccion: $choice" }
+            $output = "$pwd/_validacion/proteccion_${choice}_CE3X2.3.cex"
+            if ($choice -eq 'cancel' -and (Test-Path $output)) { throw 'Cancelar ha generado una salida.' }
+          }
+          python -c "import sys; sys.path.insert(0,'app'); import converter as c; b=c.read_cex('_validacion/proteccion_omit_CE3X2.3.cex'); s=b[3][1][0].state; assert s['correctorFSVerano']==1.0 and not s['tieneProteccionSolar']; assert len(s['elementosProteccionSolar'])==25"
+          if ($LASTEXITCODE -ne 0) { throw 'Factores solares incoherentes en destino.' }
+      - name: Revisar ejemplos oficiales de CE3X 3.2
+        shell: pwsh
+        run: |
+          $staging = Join-Path $env:RUNNER_TEMP 'ce3x_oficial'
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          $package = Join-Path $env:RUNNER_TEMP 'ce3x_archivos/CE3Xv3.2.zip'
+          Expand-Archive $package (Join-Path $staging 'installer')
+          $tool = Join-Path $staging 'innounp.zip'
+          Invoke-WebRequest 'https://raw.githubusercontent.com/jrathlev/InnoUnpacker-Windows-GUI/418937d9913c67b9abbe93a2e9e725a06f0f2be7/innounp-2/bin/innounp-2.zip' -OutFile $tool
+          if ((Get-FileHash $tool -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f8e45c9676bebc7d7570108ab572673b541fcf7a7d3d24a04319ac6b5315b4e8') { throw 'SHA256 incorrecto de la herramienta de extraccion.' }
+          Expand-Archive $tool (Join-Path $staging 'tool')
+          $examples = Join-Path $staging 'examples'
+          & "$staging/tool/innounp.exe" -x -m "-d$examples" "$staging/installer/setupCE3Xv3.2.exe" '*.cex'
+          if ($LASTEXITCODE -ne 0) { throw 'Fallo al extraer los ejemplos sin instalar CE3X.' }
+          python -B scripts/probar_ejemplos.py $examples --report _validacion/ejemplos_oficiales.json
+          if ($LASTEXITCODE -ne 0) { throw 'Fallo en la inspeccion de ejemplos oficiales.' }
+      - name: Crear paquete portatil
+        shell: pwsh
+        run: python -B scripts/empaquetar.py
+      - name: Conservar paquete e informes de pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Conversor_CE3X_windows
+          path: |
+            _release/*
+            _validacion/paneles_nativos_23.json
+            _validacion/probe_*.txt
+            _validacion/ejemplos_oficiales.json
+          retention-days: 14

@@ -41,7 +41,7 @@ Cuando el conversor detecta datos activos que puede omitir con seguridad, presen
 
 Cuando se acepta una opción con pérdidas, el estado **CONVERSION_CON_OMISIONES** identifica el resultado y muestra lo retirado o simplificado. El diagnóstico registra la decisión si el usuario solicita exportarlo. Consulta el [inventario de omisiones](docs/OMISIONES_1_5_2.md) y los [ensayos y límites de la adaptación solar](docs/VALIDACION_SOLAR.md).
 
-No garantiza compatibilidad universal ni genera por sí sola certificados, XML de registro o justificaciones HE0/HE1. La apertura, edición y el recálculo de los resultados siguen pendientes de validación en CE3X 2.3.
+La conversión tiene alcance residencial y estructural. La apertura, el recálculo y la exportación desde CE3X 2.3 se comprobaron con una vivienda docente. La [validación real](docs/VALIDACION_REAL.md) describe ese ensayo y los casos pendientes.
 
 ## Si encuentras un fallo
 
