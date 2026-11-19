@@ -1,110 +1,60 @@
 # Conversor CE3X 3.2 a CE3X 2.3
 
-Conversor experimental de archivos `.cex` residenciales de CE3X 3.2 a CE3X 2.3 para Windows 10/11 de 64 bits.
+Convierte archivos `.cex` **residenciales** de CE3X 3.2 para abrirlos en CE3X 2.3. Funciona en Windows 10/11 de 64 bits.
 
-## Descargar
+## Descargar y usar
 
-[**Descargar la última versión publicada para Windows**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/latest)
+**[Descargar última versión para Windows](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/latest)**
 
-[Releases y notas de cada versión](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases) · [Historial de cambios](CHANGELOG.md)
+1. Descarga `Conversor_CE3X_Windows_*.zip` y **extrae todo**. No ejecutes el `.exe` separado de sus carpetas.
+2. Abre `Conversor_CE3X.exe`, arrastra tu archivo y pulsa **Convertir**.
+3. Abre `nombre_CE3X2.3.cex` en CE3X 2.3 y **recalcula** antes de emitir informes.
 
-El ZIP incluye el ejecutable y Python. En Releases, descarga el archivo `Conversor_CE3X_Windows_*.zip`. Los archivos **Source code** contienen los fuentes.
+El original no se modifica. El resultado se guarda junto a él. La conversión se realiza localmente.
 
-## Cómo usar la versión publicada
+## Qué funciona y qué falta
 
-1. Extrae **todo el ZIP** en una carpeta nueva.
-2. Abre `Conversor_CE3X.exe`.
-3. Selecciona o arrastra el `.cex` de CE3X 3.2 y pulsa **Convertir**. Se guarda `nombre_CE3X2.3.cex` en la misma carpeta del original.
-4. Abre el resultado en CE3X 2.3, revisa sus datos y recalcula antes de emitir informes.
+| Elemento de CE3X 3.2 | Estado |
+| --- | --- |
+| Cerramientos (10 tipologías), ventanas convencionales, puentes térmicos y sombras | ✅ Se conservan los datos contrastados |
+| Instalaciones habituales, fotovoltaica **anual** y mejoras compatibles con sus costes | ✅ Se conservan los datos contrastados |
+| Solar térmica **mensual** | ⚠️ Adaptable solo en el caso ACS D2 ensayado; en otros casos, omisión consentida o bloqueo |
+| Persianas nuevas | ⚠️ Solo omisión consentida si están aisladas; combinadas con sombras o mejoras, bloqueo |
+| Generación eléctrica **mensual** | ❌ Sin adaptación validada, bloqueo |
+| Ventilación, recuperadores y otros sistemas nuevos activos | ❌ Sin adaptación validada, bloqueo |
 
-Conserva las carpetas del paquete junto al ejecutable. El `.exe` suelto no funciona.
-
-## Qué convierte
-
-- Datos generales, cerramientos, ventanas e instalaciones residenciales de los tipos contrastados.
-- Conjuntos de mejora de fotovoltaica, aislamiento y sustitución de ventanas contrastados, con sus datos económicos.
-- Textos con acentos, eñes y diéresis, reparando los escapes literales reconocidos.
-
-Los originales se conservan y el trabajo se realiza localmente. Si ya existe una salida con ese nombre, se pide confirmación antes de sustituirla.
-
-## Funcionalidades nuevas de 3.2 todavía no adaptadas
-
-La siguiente tabla distingue **adaptar**, **omitir con consentimiento** y **bloquear**. Es el estado del conversor, no una afirmación de que CE3X 2.3 carezca de todos esos elementos. El código de desarrollo en `main` puede ir por delante de la [última release publicada](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases).
-
-| Funcionalidad de origen 3.2 | Estado actual | Consecuencia para el usuario |
-| --- | --- | --- |
-| Persianas nuevas de huecos (tres campos adicionales) | **No adaptadas** | Solo se pueden omitir, con consentimiento, cuando no están combinadas con otras protecciones, sombras o mejoras; se restablecen los factores solares a 1. En las demás combinaciones se bloquea. |
-| Solar térmica con producción mensual | **Adaptación muy limitada** | Solo se adapta a porcentaje anual de ACS en el [ensayo D2 documentado](docs/EQUIVALENCIAS_Y_LIMITES.md#termosolar-mensual-para-acs). En otros casos conocidos puede ofrecer omisión consentida; si hay dependencias inseguras, bloquea. |
-| Generadores eléctricos con producción mensual | **Sin equivalencia validada** | Bloquea. Falta identificar el autoconsumo correspondiente a servicios computables, distinto de la generación total. |
-| Ventilación y ventiladores activos en residencial, incluida recuperación de calor | **Sin equivalencia validada** | Bloquea. No se sustituye el efecto térmico y eléctrico por un descuento genérico. |
-| Instalaciones nuevas, acumulación y campos adicionales de equipos | **Según estructura contrastada** | Conserva datos comunes; determinadas colas adicionales pueden retirarse con consentimiento. Estructuras activas desconocidas bloquean. |
-| Mejoras que incluyen generadores nuevos o protecciones no contrastadas | **Según dependencias** | Bloquea o, cuando está documentado y se autoriza, retira la mejora y las referencias asociadas; no elimina componentes en silencio. |
-
-Los cerramientos de las diez tipologías, las particiones interiores y los huecos convencionales tienen reglas de conservación. Para el inventario completo de campos y variantes, consulta la [matriz de compatibilidad](docs/MATRIZ_COMPATIBILIDAD.md) y el [inventario de omisiones](docs/OMISIONES_1_5_2.md).
+**Nunca se eliminan datos activos sin avisar.** El programa detalla las pérdidas y pide confirmación, con **Cancelar** como opción inicial. Si no puede convertir u omitir algo con seguridad, se detiene.
 
 ## Criterios y fórmulas de adaptación
 
-**Regla general:** una equivalencia numérica no basta por sí sola. Se comprueba primero con dos modelos nativos comparables, uno en CE3X 3.2 y otro en 2.3; después se contrasta el archivo convertido con el modelo nativo 2.3. Los cálculos solo se habilitan en las condiciones efectivamente ensayadas. Cuando no se conoce una equivalencia, se bloquea o se solicita consentimiento para una omisión segura.
+**Solo se habilitan equivalencias contrastadas en CE3X 2.3 y 3.2.** No se equipara una fórmula plausible con una conversión validada.
 
-### Solar térmica mensual a cobertura anual de ACS (implementada únicamente en el ensayo D2)
-
-```text
-Q_solar_anual [kWh/año] = suma(Q_solar_mes[m], m=1..12)
-D_ACS [kWh/año] = 360 × 4,18 × 100 × (60 - 11,7) / 3600 = 2.018,94
-Cobertura_ACS_2.3 [%] = 100 × Q_solar_anual / D_ACS
-```
-
-**Condiciones del ensayo:** zona D2, 100 m², 100 L/día de ACS, un equipo eléctrico de efecto Joule con rendimiento y cobertura del 100 %, sin acumulación ni otras instalaciones o contribuciones. La producción debe ser positiva y no superar la demanda calculada. Esta fórmula **no es una regla general para cualquier edificio**. Se conservan los valores energéticos anuales ensayados, pero se pierden el reparto mensual y la potencia de la instalación. [Datos y resultados del ensayo](docs/VALIDACION_SOLAR.md).
-
-### Persianas de 3.2 a «Otros» en 2.3 (hipótesis, no implementada)
-
-En un ensayo de persiana manual blanca, CE3X 3.2 guardó `correctorFSInvierno = 1`, `correctorFSVerano = 0,345` y `correctorFSCTE = 0,345`. Introducir **Otros** en CE3X 2.3 con `OtroInvierno = 1` y `OtroVerano = 0,345` produjo los mismos indicadores energéticos **en esa vivienda y a la precisión exportada**, pero el archivo 2.3 guardó `correctorFSCTE = 1`, no 0,345.
-
-La correspondencia candidata es:
+**Solar térmica, implementada en el ensayo D2:**
 
 ```text
-OtroInvierno_2.3 = correctorFSInvierno_3.2
-OtroVerano_2.3   = correctorFSVerano_3.2
+Solar_anual (kWh) = suma de las 12 producciones mensuales
+Demanda_ACS (kWh) = 360 × 4,18 × 100 × (60 - 11,7) / 3600 = 2.018,94
+Cobertura_ACS_2.3 (%) = 100 × Solar_anual / Demanda_ACS
 ```
 
-El control sin persiana y la omisión dieron el mismo XML en la batería final de 2.3. La adaptación a **Otros** sigue deshabilitada por la discrepancia del factor CTE. Faltan ensayos con sombras y mejoras combinadas. [Ensayo y discrepancia](docs/EQUIVALENCIAS_Y_LIMITES.md#persianas-de-huecos) · [Validación de la omisión](docs/INFORME_VALIDACION_FINAL.md)
+Solo para **D2, 100 m², 100 L/día de ACS y un equipo eléctrico de efecto Joule al 100 %**, sin acumulación ni otras instalaciones o contribuciones. Se pierde el reparto mensual y la potencia. [Ensayo y todas las condiciones](docs/VALIDACION_SOLAR.md).
 
-### Generación fotovoltaica mensual a contribución anual (criterio candidato, no implementado)
+**Criterios pendientes, NO implementados:**
 
-```text
-E_equivalente_2.3 [kWh/año] = suma(E_autoconsumida_en_servicios_computables_mes[m], m=1..12)
-```
+- **Persianas:** usar los factores estacionales de 3.2 como valores de **Otros** en 2.3 es una posibilidad, pero el factor CTE no coincide. [Prueba realizada](docs/EQUIVALENCIAS_Y_LIMITES.md#persianas-de-huecos).
+- **Fotovoltaica mensual:** `E_anual = suma del autoconsumo mensual computable`, **no** de toda la producción. Falta validar el tratamiento de servicios y excedentes.
+- **Recuperación de calor:** sin equivalencia energética y eléctrica suficientemente contrastada.
 
-**No equivale a sumar la producción fotovoltaica total.** Antes de automatizarlo hay que verificar qué energía es realmente autoconsumida en los servicios del certificado, cómo trata CE3X 2.3 esa contribución y qué ocurre con los excedentes. Las contribuciones **anuales** que ya tienen formato nativo compatible se conservan sin esta transformación. [Límites actuales](docs/EQUIVALENCIAS_Y_LIMITES.md#generacion-electrica-instalaciones-y-ventilacion).
+[Detalle de equivalencias](docs/EQUIVALENCIAS_Y_LIMITES.md) · [Matriz completa de compatibilidad](docs/MATRIZ_COMPATIBILIDAD.md)
 
-### Ventilación, recuperadores y otras instalaciones (sin fórmula segura)
+## ¿Está probado?
 
-No hay una fórmula general validada para convertir caudal, recuperación térmica y consumo de ventiladores en una única reducción anual. Tampoco se deduce el consumo a partir de la potencia nominal de un equipo. Hasta obtener ensayos nativos equivalentes, los sistemas activos sin regla contrastada **se bloquean**, sin adaptar ni omitir silenciosamente.
+La **v1.5.3** superó apertura, recálculo, guardado y exportación XML de **seis salidas** en CE3X 2.3, incluidas mejoras y omisiones. Es una herramienta **experimental**, no garantiza compatibilidad universal ni sustituye la revisión del técnico.
 
-**Mantenimiento de este apartado:** cada equivalencia nueva debe actualizar su estado, fórmula, unidades, condiciones, evidencia, pérdidas y pruebas. Las instrucciones para agentes de programación están en [AGENTS.md](AGENTS.md).
+[Ver pruebas y resultados](docs/INFORME_VALIDACION_FINAL.md) · [Historial de versiones](CHANGELOG.md)
 
-## Antes de utilizar el resultado
+## Si falla
 
-Es una herramienta experimental, no oficial. El estado **REVISAR** indica comprobaciones estructurales, no validación en CE3X.
+Pulsa **Guardar diagnóstico** y adjúntalo a una [incidencia en GitHub](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/issues), indicando qué ocurrió. **Revisa el ZIP antes de compartirlo**: puede contener datos del certificado.
 
-**Recalcula el edificio, los conjuntos de mejora y el análisis económico en CE3X 2.3.** Los resultados guardados proceden de la versión 3.2. Revisa las instalaciones y regenera los informes y complementos.
-
-Cuando el conversor detecta datos activos que puede omitir con seguridad, presenta un único inventario antes de crear la salida. Incluye los elementos afectados, las dependencias y los cambios de cada opción. La selección inicial es **Cancelar**. Si el programa detecta una estructura cuyo descarte es inseguro, muestra el diagnóstico y detiene la conversión.
-
-- **Omitir lo indicado y convertir** aplica el inventario de omisiones mostrado.
-- **Adaptar y convertir** conserva la cobertura anual de ACS en el caso termosolar ensayado y aplica las omisiones que figuran en esa opción. La adaptación pierde el reparto mensual y la potencia solar. [Alcance del ensayo](docs/EQUIVALENCIAS_Y_LIMITES.md#termosolar-mensual-para-acs)
-- **Cancelar** termina la operación sin crear salida.
-
-Cuando se acepta una opción con pérdidas, el estado **CONVERSION_CON_OMISIONES** identifica el resultado y muestra lo retirado o simplificado. El diagnóstico registra la decisión si el usuario solicita exportarlo. Consulta el [inventario de omisiones](docs/OMISIONES_1_5_2.md) y los [ensayos y límites de la adaptación solar](docs/VALIDACION_SOLAR.md).
-
-La conversión tiene alcance residencial. Se comprobó la apertura, el guardado, el recálculo y la exportación XML de seis salidas en CE3X 2.3. Consulta el [informe de validación final](docs/INFORME_VALIDACION_FINAL.md) para conocer los casos ensayados y sus límites.
-
-## Si encuentras un fallo
-
-Pulsa **Guardar diagnóstico** para exportar un ZIP con la información del último intento. En **Notas y adjunto** puedes añadir una explicación y un log o captura. No se generan logs automáticamente: guarda el diagnóstico antes de cerrar el programa o hacer otra conversión.
-
-Indica la versión del conversor, qué estabas haciendo y el mensaje exacto en [Issues](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/issues). Si adjuntas un diagnóstico, revísalo antes: puede contener datos del proyecto.
-
-## Desarrollo
-
-El código de la interfaz está en `fuentes/launcher.c` y el motor en `app/converter.py`. Para ejecutar desde los fuentes, compilar o colaborar, consulta la [guía de desarrollo](docs/DESARROLLO.md). Las notas técnicas de validación de la versión 1.3 están en `fuentes/VALIDACION.txt`.
+[Documentación de desarrollo](docs/DESARROLLO.md) · [Instrucciones para Codex](AGENTS.md)
