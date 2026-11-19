@@ -1,4 +1,4 @@
-# Instrucciones para Codex y otros agentes de desarrollo
+# Directrices de desarrollo y mantenimiento
 
 ## Fórmulas y límites ya investigados
 
