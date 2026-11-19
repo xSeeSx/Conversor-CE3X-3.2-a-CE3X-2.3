@@ -35,9 +35,10 @@ def thermal_solar(baseline):
     result[2][2:7] = ['La Rioja', 'Logroño', 'D2', 'III', '100']
     result[2][9] = '100'
     result[4] = [[] for _ in range(14)]
+    # Native 3.2 powers for ACS, heating and cooling go before the zone.
     result[4][0] = [['ACS', 'ACS', ['100', '', ''], 'Efecto Joule', 'Electricidad',
                      [['100', '100'], ['', ''], ['', '']], 'Conocido (Ensayado/justificado)',
-                     ['100', '', ''], [False], 'Edificio Objeto']]
+                     ['100', '', ''], [False], ['2', '', ''], 'Edificio Objeto']]
     production = fixture('solar_d2_ensayos.json')['casos'][0]['produccion_mensual_kwh']
     state = dict(zip(c.SOLAR_MONTHS, production))
     state.update(nombre='Solar', zona='Edificio Objeto', potencia=1, servicio='ACS',

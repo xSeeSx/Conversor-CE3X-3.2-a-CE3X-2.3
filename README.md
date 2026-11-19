@@ -18,10 +18,11 @@ El original no se modifica. El resultado se guarda junto a él. La conversión s
 | --- | --- |
 | Cerramientos (10 tipologías), ventanas convencionales, puentes térmicos y sombras | ✅ Se conservan los datos contrastados |
 | Instalaciones habituales, fotovoltaica **anual** y mejoras compatibles con sus costes | ✅ Se conservan los datos contrastados |
-| Solar térmica **mensual** | Calcula con la zona y los litros del CEX. Fuera del ensayo histórico requiere consentimiento experimental |
-| Persianas nuevas | Opción experimental **Otros** para persianas manuales blancas aisladas. También permite omisión consentida |
-| Generación eléctrica **mensual** | ❌ Sin adaptación validada, bloqueo |
-| Ventilación, recuperadores y otros sistemas nuevos activos | ❌ Sin adaptación validada, bloqueo |
+| Solar térmica **mensual** | Usa zona y litros del CEX. Adaptación experimental en mejoras que combinan envolvente conocida y ACS compatible |
+| Persianas nuevas | Opción experimental **Otros** para persianas manuales aisladas de cualquier color con factores válidos |
+| Autoconsumo eléctrico **mensual** | Opción experimental de aportación anual para series EPB reconocidas, sin mejoras asociadas |
+| Depósitos de ACS | Conserva UA, método y multiplicador en los formatos nativos reconocidos |
+| Aire primario, recuperadores y ventiladores | Bloqueados en residencial por falta de un campo equivalente en 2.3 |
 
 **Nunca se eliminan datos activos sin avisar.** El programa detalla las pérdidas y pide confirmación, con **Cancelar** como opción inicial. Si no puede convertir u omitir algo con seguridad, se detiene.
 
@@ -35,12 +36,7 @@ Demanda_ACS (kWh/año) = 360 × 4,18 × litros_ACS_día × (60 − T_red_zona) /
 Cobertura_ACS_2.3 (%) = 100 × suma(producción mensual) / Demanda_ACS
 ```
 
-La termosolar admite un equipo eléctrico de efecto Joule conocido al 100 %, sin acumulación ni otras aportaciones. Pierde el reparto mensual y la potencia. En persianas aisladas, **Otros** conserva los factores estacionales y lleva el factor CTE a 1. Las combinaciones con sombras o mejoras siguen bloqueadas.
-
-**Criterios pendientes**
-
-- **Fotovoltaica mensual:** `E_anual = suma del autoconsumo mensual computable`, **no** de toda la producción. Falta validar el tratamiento de servicios y excedentes.
-- **Recuperación de calor:** sin equivalencia energética y eléctrica suficientemente contrastada.
+La termosolar admite un equipo eléctrico de efecto Joule conocido al 100 %, sin acumulación ni otras aportaciones. **Otros** conserva los factores estacionales de las persianas manuales aisladas y lleva el factor CTE a 1. El autoconsumo anual se calcula sumando los doce valores EPB declarados. La adaptación pierde el reparto mensual.
 
 [Detalle de equivalencias](docs/EQUIVALENCIAS_Y_LIMITES.md) · [Matriz completa de compatibilidad](docs/MATRIZ_COMPATIBILIDAD.md)
 

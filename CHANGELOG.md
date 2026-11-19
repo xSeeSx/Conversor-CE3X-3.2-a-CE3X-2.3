@@ -1,5 +1,13 @@
 # Historial de cambios
 
+## 1.6.0 - 2026-11-19
+
+- Persiana manual aislada de cualquier color mediante los factores estacionales guardados. La adaptación experimental avisa de que el factor CTE pasa a 1.
+- Autoconsumo mensual renovable mediante una contribución eléctrica anual experimental, con contraste en ambas versiones.
+- Mejoras experimentales de envolvente y solar de ACS con parámetros invariantes, costes y referencias.
+- Conservación de los métodos de acumulación de ACS reconocidos y de su multiplicador nativo.
+- Aviso experimental breve con el inventario técnico en **Ver detalles**.
+
 ## 1.5.4 - 2026-11-19
 
 - Adaptación termosolar de ACS con la zona y el caudal del proyecto. Las configuraciones fuera del ensayo histórico requieren consentimiento experimental. Se contrastaron dos casos adicionales en CE3X 3.2 y 2.3.

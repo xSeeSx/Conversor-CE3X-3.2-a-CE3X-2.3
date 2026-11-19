@@ -15,6 +15,8 @@ def prepare(source, directory):
     if base[0] != 'CE3Xv3.2 Residencial' or base[5] or not candidate or base[2][4] != 'D1':
         raise ValueError(f'Se requiere el origen del ensayo termosolar D1. {reason}')
 
+    if len(systems[0][0]) == 10:
+        systems[0][0].insert(9, ['2', '', ''])
     directory.mkdir(parents=True)
     (directory / 'origenes').mkdir()
     (directory / 'iniciales').mkdir()
