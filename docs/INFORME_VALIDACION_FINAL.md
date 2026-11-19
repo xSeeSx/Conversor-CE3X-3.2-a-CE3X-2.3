@@ -1,6 +1,6 @@
 # Validación integral del conversor CE3X
 
-Ensayo local del 19 de noviembre de 2026 sobre la base `b42c9d5`. Se usaron CE3X 2.3 y 3.2 instalados en Windows, la vivienda docente del paquete oficial 3.2 y copias sintéticas derivadas. Los CEX y XML de trabajo permanecen locales. Los resultados de 3.2 y 2.3 de las sesiones previas se mantienen en los informes de procedencia. [Validación real de la vivienda oficial](VALIDACION_REAL.md) · [Equivalencias y límites](EQUIVALENCIAS_Y_LIMITES.md)
+Ensayo local del 19 de noviembre de 2026 para la versión 1.5.3, sobre la base `b42c9d5`. Se usaron CE3X 2.3 y 3.2 instalados en Windows, la vivienda docente del paquete oficial 3.2 y copias sintéticas derivadas. Los CEX y XML de trabajo permanecen locales. Los resultados de 3.2 y 2.3 de las sesiones previas se mantienen en los informes de procedencia. [Validación real de la vivienda oficial](VALIDACION_REAL.md) · [Equivalencias y límites](EQUIVALENCIAS_Y_LIMITES.md)
 
 ## Reproducir
 
@@ -23,7 +23,7 @@ La comprobación de Windows prepara la misma batería sin abrir CE3X y adjunta e
 | Termosolar D2 omitido | Advertencia y consentimiento. Se retira el generador sin alterar el equipo de ACS. | Apertura, recálculo, guardado y XML D2 comprobados. El consumo final de ACS es 20,19 kWh/m²·año. |
 | Termosolar D2 cancelado | Se pulsa Cancelar en el protocolo del lanzador. El origen conserva su hash y no se crea salida. | Se verifica la finalización sin archivo. |
 | Envolvente ampliada y fotovoltaica anual | Diez tipologías, hueco conocido y estimados, puentes, sombras, dos zonas anidadas, calderas mixtas y refrigeración. Se conserva la contribución eléctrica anual en la forma compatible. | Apertura, recálculo, guardado y XML comprobados. La contribución mensual sigue fuera del alcance y tiene prueba de bloqueo. |
-| Tres mejoras con costes | Tres conjuntos, siete filas de costes y referencias del ejemplo oficial conservados. El plan solicita consentimiento por campos auxiliares de 3.2. | Apertura, recálculo del edificio base, guardado y XML comprobados. La comprobación del recálculo individual se trata por separado. |
+| Tres mejoras con costes | Tres conjuntos, siete filas de costes y referencias del ejemplo oficial conservados. El plan solicita consentimiento por campos auxiliares de 3.2. | Apertura, recálculo del edificio base, guardado y XML comprobados. Se verificó el recálculo de los tres conjuntos mediante sus resultados guardados en el CEX. |
 
 La batería compara las referencias, áreas, transmitancias, factores solares de vidrio, longitudes y Ψ, grupos de instalaciones y cantidades de mejoras. La salida directa conserva esos datos del origen. Los grupos vacíos exclusivos de 3.2 se retiran según el esquema. Los CEX iniciales y sus orígenes conservaron el SHA256. La conversión conserva exactamente los dos patrones de sombras. Al guardar en 2.3, la aplicación actualizó los coeficientes calculados de ambos patrones y conservó sus polígonos, nombres y referencias. Este cambio se verificó entre el CEX recién convertido y el CEX guardado por CE3X 2.3.
 
@@ -42,8 +42,16 @@ Las demandas y la energía primaria no renovable se expresan en kWh/m²·año. L
 
 Durante el ensayo se corrigió la recogida del consumo final en XML 2.3. El fichero publica ese valor por vector y servicio. El banco lo conserva con su etiqueta y unidad, separado del indicador agregado de formato 3.2. Una regresión comprueba la distinción.
 
+El XML del edificio base no enumera los tres conjuntos. El recálculo individual quedó acreditado en el CEX guardado. Los tres valores de energía primaria no renovable pasaron de 167,37341, 148,66904 y 140,90954 a 167,37545, 148,67146 y 140,91155 kWh/m²·año, respectivamente. Se conservaron las siete filas de costes.
+
+### Control entre versiones
+
+La copia directa se guardó y recalculó también en CE3X 3.2. Para exportar su XML se completaron el uso y la protección en la ficha administrativa. Tras el guardado se comprobaron los mismos datos generales comunes, geometría, equipos y patrones de sombras. Se registraron cuatro valores adicionales de 3.2 en el bloque general. La copia de control se conservó separada del origen usado para convertir.
+
+Los 21 indicadores comparables, incluida la compacidad de 4,46 m, coincidieron a la precisión del XML. Esto acota el resultado al modelo directo ensayado. En la vivienda oficial con mejoras de la sesión 1 se mantienen las diferencias observadas de +0,01 en energía primaria no renovable y emisiones.
+
 ## Límites pendientes
 
-1. Obtener y conservar evidencia del recálculo de los conjuntos en CE3X 2.3. El XML de edificio base puede omitir resultados individuales.
-2. Completar los controles nativos equivalentes en 3.2 y 2.3 donde falten. La sesión 1 midió diferencias de +0,01 en energía primaria no renovable y emisiones, sin una referencia 2.3 independiente para atribuirlas.
+1. Ampliar los controles nativos equivalentes para atribuir las diferencias en edificios con otras configuraciones, incluidas las medidas combinadas.
+2. Contrastar el análisis económico recalculado y la generación de PDF. Este ensayo comprobó la conservación de costes y referencias.
 3. Mantener bloqueadas las equivalencias que carecen de prueba. En la persiana manual, **Otros** conserva los factores estacionales y altera el CTE de 0,345 a 1. En generación mensual y ventilación residencial faltan modelos comparables. [Matriz de compatibilidad](MATRIZ_COMPATIBILIDAD.md)

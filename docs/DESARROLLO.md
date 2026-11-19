@@ -1,6 +1,6 @@
 # Desarrollo
 
-Esta guía corresponde a la versión 1.4.0. La interfaz nativa utiliza el estilo técnico compacto, con controles escalados según los DPI de Windows.
+Esta guía corresponde a la versión 1.5.3. La interfaz nativa escala los controles según los DPI de Windows.
 
 ## Ejecutar el motor
 
@@ -8,7 +8,7 @@ Python 3.11 o posterior, sin paquetes externos. Desde la raíz del repositorio:
 
 ```sh
 python app/converter.py self-test
-python -m unittest discover -s fuentes -p test_converter.py -v
+python -m unittest discover -s fuentes -v
 python app/converter.py convert --source origen.cex
 ```
 

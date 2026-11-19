@@ -1,6 +1,6 @@
 # Equivalencias y límites de conversión
 
-La sesión 2 parte de la matriz residencial. Los cambios descritos corresponden al código fuente en desarrollo. Para atribuir una diferencia al conversor hacen falta tres resultados. Se comparan primero los modelos nativos 3.2 y 2.3 de la misma configuración. Después se compara el 2.3 convertido con la referencia nativa 2.3. El banco local genera las diferencias absolutas y relativas para magnitudes con igual unidad. Cuando la base es cero, informa solo de la diferencia absoluta. [Matriz](MATRIZ_COMPATIBILIDAD.md) · [Banco local](VALIDACION_REAL.md)
+Los criterios y cambios de la sesión 2 se incorporan a la versión 1.5.3. Para atribuir una diferencia al conversor hacen falta tres resultados. Se comparan primero los modelos nativos 3.2 y 2.3 de la misma configuración. Después se compara el 2.3 convertido con la referencia nativa 2.3. El banco local genera las diferencias absolutas y relativas para magnitudes con igual unidad. Cuando la base es cero, informa solo de la diferencia absoluta. [Matriz](MATRIZ_COMPATIBILIDAD.md) · [Banco local](VALIDACION_REAL.md)
 
 ## Persianas de huecos
 

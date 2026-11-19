@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## 1.5.3 - 2026-11-19
+
+- Verificada la apertura, el guardado, el recálculo y la exportación XML de seis salidas en CE3X 2.3. Se añadió una batería reproducible con muestras docentes y sintéticas.
+- Adaptación termosolar ceñida a la configuración D2 ensayada y diagnóstico con los parámetros y la fórmula aplicada.
+- Documentada la diferencia del factor solar CTE entre la persiana 3.2 y la opción **Otros** de 2.3. Se mantiene el consentimiento para omitir una protección aislada.
+- Diagnósticos más precisos para generación eléctrica mensual y ventilación activa. El banco local recoge el consumo final por vector y servicio del XML 2.3.
+
 ## 1.5.2
 
 - Inventario previo de recortes y reinicios, con elementos afectados, dependencias y consentimiento explícito antes de crear la salida.

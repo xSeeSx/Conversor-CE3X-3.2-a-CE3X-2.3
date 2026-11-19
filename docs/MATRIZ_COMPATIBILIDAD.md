@@ -1,6 +1,6 @@
 # Matriz de compatibilidad residencial CE3X 3.2 → 2.3
 
-La matriz se refiere al motor 1.5.2. Se contrastaron el perfil, el esquema de mejoras, las muestras oficiales y las pruebas versionadas. **E** indica transferencia directa comprobada para los campos citados. **C** indica una equivalencia calculada que requiere validación fuera del ensayo citado. **S** indica simplificación con posible pérdida. **N** indica ausencia de equivalencia comprobada. **?** identifica una estructura o variante sin evidencia suficiente. La igualdad estructural y el recálculo de un caso concreto tienen alcances distintos.
+La matriz se refiere al motor 1.5.3. Se contrastaron el perfil, el esquema de mejoras, las muestras oficiales y las pruebas versionadas. **E** indica transferencia directa comprobada para los campos citados. **C** indica una equivalencia calculada que requiere validación fuera del ensayo citado. **S** indica simplificación con posible pérdida. **N** indica ausencia de equivalencia comprobada. **?** identifica una estructura o variante sin evidencia suficiente. La igualdad estructural y el recálculo de un caso concreto tienen alcances distintos.
 
 ## Origen y alcance de la evidencia
 

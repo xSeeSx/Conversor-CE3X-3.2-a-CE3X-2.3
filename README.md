@@ -4,11 +4,11 @@ Conversor experimental de archivos `.cex` residenciales de CE3X 3.2 a CE3X 2.3 p
 
 ## Descargar
 
-[**Descargar para Windows, versión 1.5.2**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/download/v1.5.2/Conversor_CE3X_Windows_1_5_2.zip)
+[**Descargar para Windows, versión 1.5.3**](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/download/v1.5.3/Conversor_CE3X_Windows_1_5_3.zip)
 
 [Releases y notas de cada versión](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases) · [Historial de cambios](CHANGELOG.md)
 
-El ZIP incluye el ejecutable y Python. En Releases, descarga `Conversor_CE3X_Windows_1_5_2.zip`. Los archivos **Source code** contienen los fuentes.
+El ZIP incluye el ejecutable y Python. En Releases, descarga `Conversor_CE3X_Windows_1_5_3.zip`. Los archivos **Source code** contienen los fuentes.
 
 ## Cómo usar la versión publicada
 
@@ -41,7 +41,7 @@ Cuando el conversor detecta datos activos que puede omitir con seguridad, presen
 
 Cuando se acepta una opción con pérdidas, el estado **CONVERSION_CON_OMISIONES** identifica el resultado y muestra lo retirado o simplificado. El diagnóstico registra la decisión si el usuario solicita exportarlo. Consulta el [inventario de omisiones](docs/OMISIONES_1_5_2.md) y los [ensayos y límites de la adaptación solar](docs/VALIDACION_SOLAR.md).
 
-La conversión tiene alcance residencial y estructural. La apertura, el recálculo y la exportación desde CE3X 2.3 se comprobaron con una vivienda docente. La [validación real](docs/VALIDACION_REAL.md) describe ese ensayo y los casos pendientes.
+La conversión tiene alcance residencial. Se comprobó la apertura, el guardado, el recálculo y la exportación XML de seis salidas en CE3X 2.3. Consulta el [informe de validación final](docs/INFORME_VALIDACION_FINAL.md) para conocer los casos ensayados y sus límites.
 
 ## Si encuentras un fallo
 
