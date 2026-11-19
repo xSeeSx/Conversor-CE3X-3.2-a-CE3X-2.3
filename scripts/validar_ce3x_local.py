@@ -141,6 +141,15 @@ def collect_xml(path):
                         add(f'{prefix}{scope}/{family}/{service}', part.text, unit)
 
     indicators(doc, '')
+    # Legacy 2.3 exports final energy by carrier. Keep these figures distinct from
+    # the aggregate final-energy indicators published by the current XML schema.
+    for consumption in children(doc, 'Consumo'):
+        for vectors in children(consumption, 'EnergiaFinalVectores'):
+            for vector in vectors:
+                for part in vector:
+                    service = SERVICES.get(local_name(part.tag).lower())
+                    if service and not list(part):
+                        add(f'EnergiaFinalPorVectores/{local_name(vector.tag)}/{service}', part.text, RATE_UNIT)
     for section in children(doc, 'MedidasMejora'):
         for measure in children(section, 'MedidaMejora'):
             names = children(measure, 'Nombre')

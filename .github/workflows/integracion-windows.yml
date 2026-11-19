@@ -159,6 +159,14 @@ jobs:
       - name: Crear paquete portatil
         shell: pwsh
         run: python -B scripts/empaquetar.py
+      - name: Preparar batería residencial final
+        shell: pwsh
+        run: |
+          $fixture = '_validacion/muestras_oficiales/b57a58f3e639757e6b8576f895cc3f6cfc8abd8952cf3ce22c7238df1da54dba.cex'
+          python -B -X utf8 scripts/validar_bateria_final.py preparar _validacion/bateria_final --oficial32 $fixture
+          if ($LASTEXITCODE -ne 0) { throw 'Falló la preparación de la batería.' }
+          python -B -X utf8 scripts/validar_bateria_final.py recoger _validacion/bateria_final
+          if ($LASTEXITCODE -ne 0) { throw 'Falló la comprobación estructural de la batería.' }
       - name: Conservar paquete e informes de pruebas
         if: always()
         uses: actions/upload-artifact@v4
@@ -169,4 +177,5 @@ jobs:
             _validacion/paneles_nativos_23.json
             _validacion/probe_*.txt
             _validacion/ejemplos_oficiales.json
+            _validacion/bateria_final/resultados.json
           retention-days: 14

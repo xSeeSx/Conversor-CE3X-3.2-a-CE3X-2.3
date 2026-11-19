@@ -22,7 +22,9 @@ class LocalValidationTests(unittest.TestCase):
             old.write_text('''<DatosEnergeticosDelEdificio>
                 <Demanda><EdificioObjeto><Calefaccion>118.25</Calefaccion>
                 <Refrigeracion>0.83</Refrigeracion><Conjunta08>99999999</Conjunta08></EdificioObjeto></Demanda>
-                <Consumo><EnergiaPrimariaNoRenovable><Global>189.22</Global></EnergiaPrimariaNoRenovable></Consumo>
+                <Consumo><EnergiaPrimariaNoRenovable><Global>189.22</Global></EnergiaPrimariaNoRenovable>
+                <EnergiaFinalVectores><GasNatural><ACS>26.53</ACS><Global>157.23</Global></GasNatural>
+                </EnergiaFinalVectores></Consumo>
                 <EmisionesCO2><Global>40.04</Global></EmisionesCO2>
                 <Calificacion><EmisionesCO2><Global>E</Global></EmisionesCO2></Calificacion>
                 </DatosEnergeticosDelEdificio>''', encoding='utf-8')
@@ -34,6 +36,9 @@ class LocalValidationTests(unittest.TestCase):
                 </DatosEnergeticosDelEdificio>''', encoding='utf-8')
             cases = {'origen32': {'indicadores': validation.collect_xml(new)},
                      'convertido23': {'indicadores': validation.collect_xml(old)}}
+            legacy = cases['convertido23']['indicadores']
+            self.assertEqual(legacy['EnergiaFinalPorVectores/GasNatural/Acs'],
+                             {'valor': 26.53, 'unidad': 'kWh/m²·año'})
             rows = {row[2]: row[3:] for row in validation.comparisons(cases)}
             self.assertEqual(len(rows), 5)
             self.assertEqual(rows['Indicadores/Demanda/Ref'], ('kWh/m²·año', 0, 0.83, 0.83, None))

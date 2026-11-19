@@ -11,7 +11,7 @@ import converter as c
 PUBLIC_EXAMPLE = 'b57a58f3e639757e6b8576f895cc3f6cfc8abd8952cf3ce22c7238df1da54dba'
 
 
-def prepare(source, directory):
+def load_baseline(source):
     if c.sha(source) != PUBLIC_EXAMPLE:
         raise ValueError('Se requiere el ejemplo oficial 3.2 «2 Vivienda dentro de bloque»')
     blocks = c.read_cex(source)
@@ -24,6 +24,11 @@ def prepare(source, directory):
     window.state['elementosProteccionSolar'] = (
         [''] * 6 + [['', 0, 0], ['', 0, 0], '', False, False, '', False, False, '', '', '',
                     False, False, False, False, False, False, False, ['', '']])
+    return blocks
+
+
+def prepare(source, directory):
+    blocks = load_baseline(source)
     directory.mkdir(parents=True)
     base = directory / 'base32.cex'
     base.write_bytes(c.encoded(blocks))
