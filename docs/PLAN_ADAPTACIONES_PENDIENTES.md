@@ -4,11 +4,11 @@ Documento de trabajo para Codex. **No describe funcionalidades ya disponibles.**
 
 **Fórmulas físicas, ejemplos numéricos y pruebas preparadas:** [docs/FORMULAS_EQUIVALENCIAS_PENDIENTES.md](FORMULAS_EQUIVALENCIAS_PENDIENTES.md). Contiene recuperación sensible/entálpica, ventiladores, fotovoltaica mensual, persianas y ACS solar. Úsalo para evitar rehacer investigación; no habilites equivalencias sin prueba en CE3X 2.3.
 
-**Avance:** se generalizó la solar térmica con consentimiento experimental y contraste en D1 y D2. Una persiana manual blanca aislada se puede representar experimentalmente como «Otros», con cambio explícito del factor CTE. Fotovoltaica mensual, ventilación con recuperación, mejoras combinadas y otros equipos o acumuladores siguen pendientes de evidencia nativa. [Detalle de ensayos y límites](EQUIVALENCIAS_Y_LIMITES.md)
+**Estado tras v1.5.4:** la termosolar se generalizó con valores del certificado y consentimiento experimental, con contrastes D1/D2. Está resuelto el problema artificial de D2, 100 m² y 100 L/día. La adaptación de persianas sigue limitada por código a «Manuales» y «Blanco», aunque el destino «Otros» utiliza factores estacionales numéricos; **prioridad inmediata: quitar esa restricción cromática injustificada y ensayar otros colores**. Fotovoltaica mensual, ventilación/recuperación, mejoras combinadas y equipos especiales siguen pendientes. Los cambios de la ventana experimental posteriores a la release 1.5.4 no están en el ZIP publicado. [Detalle de ensayos y límites](EQUIVALENCIAS_Y_LIMITES.md)
 
-## P0 - Generalizar la adaptación de solar térmica mensual a ACS
+## P0 - Solar térmica mensual ACS: base generalizada en v1.5.4, ampliaciones pendientes
 
-**Problema actual (motor 1.5.3):** `solar_candidate()` en `app/converter.py` exige literalmente zona `D2`, superficie de `100 m²`, ACS de `100 L/día`, un único equipo eléctrico por efecto Joule con 100 % de rendimiento y cobertura, y ausencia de acumulación y otras instalaciones. Estas eran las condiciones del **ensayo**, no reglas universales de conversión. En un certificado corriente se impide adaptar aunque los datos sean perfectamente reconocibles.
+**Antecedente resuelto desde la v1.5.4 (motor 1.5.3):** `solar_candidate()` en `app/converter.py` exige literalmente zona `D2`, superficie de `100 m²`, ACS de `100 L/día`, un único equipo eléctrico por efecto Joule con 100 % de rendimiento y cobertura, y ausencia de acumulación y otras instalaciones. Estas eran las condiciones del **ensayo**, no reglas universales de conversión. En un certificado corriente se impide adaptar aunque los datos sean perfectamente reconocibles.
 
 **Objetivo:** calcular la conversión a cobertura anual de ACS a partir de **los valores propios del certificado**, sin exigir que replique el caso de prueba. Eliminar las restricciones artificiales de 100 m² / 100 L/día; ampliar a zonas climáticas distintas de D2 empleando la temperatura de agua fría y los criterios de cálculo correspondientes según documentación y motor CE3X 2.3. Investigar los equipos y situaciones adicionales por separado, sin extrapolar arbitrariamente.
 
@@ -42,11 +42,21 @@ En unidades del ensayo: `dias_23=360`, `ρ_agua≈1 kg/L` absorbida al usar litr
 - Pruebas locales y de regresión pasan; los cambios de alcance quedan documentados.
 - No declarar «universal» la adaptación mientras existan equipos o condiciones sin prueba.
 
-## Backlog de funcionalidades nuevas no adaptadas
+
+### Prioridad inmediata tras v1.5.4
+
+1. **Persianas manuales de cualquier color:** comprobar que los factores estacionales actuales del CEX 3.2 ya incorporan el efecto del color y se pueden escribir en «Otros» 2.3. El destino no dispone de campo de color: inventariar su pérdida, conservar los factores, advertir el cambio de CTE y exigir consentimiento experimental. Ensayar varios colores; no exigir blanco ni D1/D2 por coincidir con el ejemplo. No incluir automáticas, sombras combinadas o mejoras sin pruebas específicas.
+2. **Fotovoltaica eléctrica mensual:** interpretar el campo de autoconsumo EPB frente a producción total, establecer la equivalencia con el dato anual 2.3 y probar excedentes. No confundir la ausencia de ensayo con incompatibilidad probada.
+3. **Ventilación y recuperadores:** inspeccionar los paneles nativos de **ambas** versiones, determinar si se pueden trasladar directamente caudal y rendimiento, y separar consumo eléctrico de los ventiladores. Usar ecuaciones de [fórmulas candidatas](FORMULAS_EQUIVALENCIAS_PENDIENTES.md), sin sustituir el caudal higiénico por el equivalente térmico sin validación.
+4. **Mejoras combinadas, acumuladores y equipos:** ampliar las referencias y escenarios que bloquean antes de declarar una equivalencia imposible.
+
+**Continuidad:** después de implementar una adaptación y pasar sus pruebas, seguir con la siguiente tarea, mientras haya acceso al entorno y presupuesto de uso. No publicar una release intermedia y dar por finalizado todo el backlog. Ante una imposibilidad, registrar causa y evidencia concreta, pasar al siguiente pendiente y dejar el documento actualizado.
+
+## Backlog siguiente: P1 antes que nuevos ensayos P0
 
 | Prioridad | Funcionalidad | Estado del motor 1.5.3 | Siguiente paso de ingeniería |
 | --- | --- | --- | --- |
-| P1 | Persianas nuevas 3.2 | Solo omisión explícita en huecos aislados; sombras combinadas o mejoras bloquean. | Ensayar traducción a «Otros» 2.3, analizar discrepancia de `correctorFSCTE`, contrastar refrigeración/calefacción, sombras y mejoras. |
+| P1 | Persianas nuevas 3.2 | En v1.5.4, «Otros» experimental **solo para persianas manuales blancas aisladas**; otras variantes se omiten con permiso o bloquean según dependencias. | **Quitar la condición literal de color «Blanco»**: para persianas manuales aisladas, utilizar los correctores estacionales ya calculados del CEX, con validación de valores, color reconocido solo como metadato perdido y aviso CTE; probar varios colores y zonas. Investigar después automáticas, persianas con sombras y mejoras, sin mezclarlas sin contraste. |
 | P1 | Generación eléctrica/fotovoltaica **mensual** | Se bloquea la estructura nueva activa. Fotovoltaica **anual** compatible ya se conserva. | Determinar qué energía es autoconsumida computable y qué se exporta; construir equivalentes nativos con excedentes y distintos servicios. |
 | P2 | Ventilación y recuperadores/ventiladores activos | Se bloquean los grupos sin estructura residencial equivalente. | Distinguir consumo de ventiladores, caudales y efecto de la recuperación; probar representaciones nativas, no descontar energía sin respaldo. |
 | P2 | Mejora con elementos nuevos, generadores compartidos o dependencias desconocidas | Se bloquea cuando no se pueden preservar referencias. | Ampliar inspección de copias de equipos, medidas combinadas y costes; consentir omisión solo si se retira limpiamente el conjunto afectado. |
