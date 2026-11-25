@@ -1,5 +1,16 @@
 # Directrices de desarrollo y mantenimiento
 
+## Objetivo de la conversion
+
+Convertir el CEE 3.2 al mismo CEE en formato 2.3. Los datos comunes se conservan,
+incluidos campos vacios, incompletos o incoherentes: se avisa, sin rellenarlos,
+corregirlos ni cancelar por su calidad fisica. Separar estas comprobaciones de
+las de estructura y serializacion. Solo los elementos nuevos de 3.2 necesitan
+adaptaciones y calculos con entradas validas, o una omision consentida cuando
+no hay correspondencia. Nunca copiar valores del edificio base a una mejora
+para suplir datos ausentes. Mantener pruebas de conservacion tras releer el CEX.
+
+
 ## Fórmulas y límites ya investigados
 
 Antes de investigar las equivalencias P0-P3, lee [docs/FORMULAS_EQUIVALENCIAS_PENDIENTES.md](docs/FORMULAS_EQUIVALENCIAS_PENDIENTES.md). Contiene ecuaciones, unidades, contraejemplos y pruebas de recuperadores, ventiladores, generación eléctrica mensual, persianas y solar térmica. **Reutilizar y contrastar** en los ejecutables nativos, sin gastar una sesión repitiendo derivaciones físicas. Las fórmulas candidatas no son adaptaciones activas.

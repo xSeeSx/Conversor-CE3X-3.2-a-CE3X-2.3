@@ -21,13 +21,15 @@ El original no se modifica. El resultado se guarda junto a él. La conversión s
 | Solar térmica **mensual** | Usa zona y litros del CEX. Adaptación experimental en mejoras que combinan envolvente conocida y ACS compatible |
 | Persianas nuevas | Opción experimental **Otros** para persianas manuales aisladas de cualquier color con factores válidos |
 | Autoconsumo eléctrico **mensual** | Opción experimental de aportación anual para series EPB reconocidas, sin mejoras asociadas |
-| Depósitos de ACS | Conserva UA, método y multiplicador en los formatos nativos reconocidos |
+| Complementos (Isover, Ursa y otros) | Se conserva su bloque de datos, incluido texto y estructuras compuestas; revisar con el complemento instalado |
+| Depósitos de ACS | Conserva todos los campos nativos, incluidos vacíos, UA, método y multiplicador |
 | Aire primario, recuperadores y ventiladores | Bloqueados en residencial por falta de un campo equivalente en 2.3 |
 
 **Nunca se eliminan datos activos sin avisar.** El programa detalla las pérdidas y pide confirmación, con **Cancelar** como opción inicial. Si no puede convertir u omitir algo con seguridad, se detiene.
 
 ## Criterios y fórmulas de adaptación
 
+Los campos comunes se conservan aunque estén vacíos o sean incoherentes: se avisa sin rellenarlos ni cancelar. Las validaciones físicas estrictas se reservan para los cálculos de adaptación de elementos nuevos de 3.2.
 Las opciones experimentales se identifican antes de convertir y requieren consentimiento y recálculo.
 El aviso experimental recomienda comparar ambos certificados y permite consultar el inventario completo en **Ver detalles**.
 

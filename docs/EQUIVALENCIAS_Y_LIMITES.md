@@ -61,3 +61,39 @@ El método nativo `Instalaciones.panelVentilacion.Panel1.cogerDatos` devuelve la
 En ACS, `panelInstalaciones.cogerDatosDelPanel` de 2.3 y 3.2 serializa volumen (L), consignas (°C), UA (W/K) y método en las mismas posiciones. Los métodos por defecto y estimado guardan además el multiplicador adimensional. Estimado conserva también espesor y material del aislamiento. El ejemplo oficial **1 Bloque de viviendas** usa el multiplicador 10 en el séptimo campo. Se conserva tal cual. Si un generador nuevo depende de un depósito, su balance sigue fuera de la adaptación termosolar.
 
 CE3X 2.3 abrió y recalculó una copia convertida con la fila de depósito de ese ejemplo y guardó los siete campos con el multiplicador 10. También exportó una mejora combinada con sustitución de ventanas y 480 kWh/año de solar para ACS. El consumo final de ACS de la mejora fue 12,03 kWh/m²·año y el del edificio base 15,23. La mejora mantuvo la selección de informe y sus dos filas de coste.
+
+
+## Conservación de datos incompletos (1.6.1)
+
+La conversión de campos comunes es una transferencia de datos, no una
+validación de la calidad física del certificado. Los valores numéricos vacíos,
+no numéricos o fuera de rango se conservan con `W_NATIVE_VALUE`. El resumen y
+el diagnóstico identifican sus rutas. No se rellenan desde la plantilla, el
+edificio base ni otras copias. No se pide consentimiento por conservarlos.
+
+Esto incluye superficie y altura generales, áreas y transmitancias de la
+envolvente, puentes y entradas de mejoras, y volumen, consignas, UA, aislamiento
+y multiplicador de depósitos ACS con estructura nativa reconocida. Las
+conversiones de representación numérica exigidas por 2.3 se mantienen cuando
+el dato es válido. Los formatos y métodos desconocidos siguen bloqueados.
+`as_num` sigue siendo estricto para las fórmulas de adaptación de elementos
+nuevos de 3.2; esta corrección no habilita adaptaciones con entradas inválidas.
+
+Evidencia: posiciones de depósito comunes documentadas en la validación 1.6.0
+y pruebas sintéticas en `fuentes/test_converter.py`, incluida escritura y
+relectura de los tres métodos, todas las copias de instalaciones de mejora,
+costes y conservación del original. No se ha ensayado el recálculo nativo de
+un depósito incompleto: debe completarse si lo exige CE3X 2.3.
+
+
+## Bloque común de complementos (1.6.1)
+
+Se conserva el bloque 12 como datos opacos, sin exigir que las entradas sean
+escalares ni reiniciarlas. Un complemento como Ursa puede guardar listas,
+diccionarios y tuplas; esta forma no identifica por sí sola un elemento nuevo
+de 3.2. La comprobación de conservación y la relectura cubren el bloque completo,
+incluidos tipos STRING/UNICODE, referencias compartidas y datos vacíos. Las
+clases exclusivas sin regla siguen rechazándose por la validación de clases.
+La regresión sintética cubre texto Isover y datos compuestos Ursa sin publicar
+información particular. No se ha validado el funcionamiento interno de estos
+complementos en CE3X 2.3; conservar el bloque no acredita equivalencia de cálculos.

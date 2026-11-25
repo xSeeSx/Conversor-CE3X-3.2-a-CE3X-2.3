@@ -323,17 +323,47 @@ class ConverterTests(unittest.TestCase):
         src=copy.deepcopy(self.src);src[3][1][0].state['cerramientoAsociado']='ausente';self.assertFailure('E_WINDOW_REFERENCE',src)
     def test_duplicate_envelope(self):
         src=copy.deepcopy(self.src);src[3][0].append(copy.deepcopy(src[3][0][0]));self.assertFailure('E_DUPLICATE',src)
-    def test_invalid_number(self):
-        src=copy.deepcopy(self.src);src[2][6]='nan';self.assertFailure('E_NUMBER',src)
-    def test_reset_addons_preserves_economics(self):
-        src=copy.deepcopy(self.src);src[6][0]=[['factura original',123]];src[12]={'Isover':'resultado viejo'}
-        code,plan=self.run_convert(source=src)
-        self.assertEqual(code,2,plan.summary)
-        self.assertEqual([x['element'] for x in plan.audit.losses],['Isover'])
-        code,run=self.accept(plan)
-        self.assertEqual(code,0,run.summary)
-        dst=c.read_cex(run.output)
-        self.assertEqual(dst[6],src[6]);self.assertEqual(dst[12],{})
+    def test_native_invalid_numbers_are_preserved_with_warning(self):
+        for value in ('', 'nan', 'sin dato', '-1', None):
+            with self.subTest(value=value):
+                self.src[2][6] = value
+                self.src[2][7] = value
+                self.src[3][0][0][2:4] = [value, value]
+                self.src[3][1][0].state.update(superficie=value, Uvidrio=value)
+                code, run = self.run_convert()
+                self.assertEqual(code, 0, run.summary)
+                dst = c.read_cex(run.output)
+                self.assertEqual(dst[2][6:8], [value, value])
+                self.assertEqual(dst[3][0][0][2:4], [value, value])
+                self.assertEqual(dst[3][1][0].state['superficie'], value)
+                self.assertEqual(dst[3][1][0].state['Uvidrio'], value)
+                self.assertTrue(run.manifest['preserved_value_warnings'])
+                self.assertIn('conservados sin cambios', run.summary)
+                run.output.unlink()
+
+    def test_adaptation_numbers_remain_strict(self):
+        for value in ('', 'nan', 'sin dato', None, True):
+            with self.subTest(value=value), self.assertRaises(c.ConversionError):
+                c.as_num(value, 'adaptacion')
+
+    def test_addons_preserve_nested_data_types_sharing_and_economics(self):
+        shared = [c.LegacyString('aislamiento'), '', None, True, 1.5]
+        self.src[12] = {'Isover':'resultado anterior',
+                        'Ursa':{'configuracion':shared, 'resultados':shared,
+                                'seleccion':(False,'',{'espesor':'0.08'})}}
+        self.src[6][0] = [['factura original',123]]
+        code, run = self.run_convert()
+        self.assertEqual(code, 0, run.summary)
+        dst = c.read_cex(run.output)
+        self.assertEqual(c.typed_value(dst[12]), c.typed_value(self.src[12]))
+        self.assertIs(dst[12]['Ursa']['configuracion'], dst[12]['Ursa']['resultados'])
+        self.assertEqual(dst[6], self.src[6])
+        self.assertFalse(any(x['path'].startswith('complementos.') for x in run.audit.losses))
+
+    def test_addon_new_classes_still_rejected_without_deleting_data(self):
+        self.src[12] = {'Ursa':c.CexObject(c.GlobalRef('nuevo32','ClaseExclusiva'))}
+        self.assertFailure('E_TARGET_CLASS')
+
     def test_truncated_file_diagnostic(self):
         self.source_path.write_bytes(c.encoded(self.src)[:300]);self.template_path.write_bytes(c.encoded(self.template))
         code,run=c.convert(self.source_path,self.template_path);self.assertEqual(code,1)
@@ -589,11 +619,19 @@ class ConverterTests(unittest.TestCase):
         self.assertEqual(result,definition)
         self.assertIsInstance(result[0][2][1],str)
 
-    def test_bridge_improvement_rejects_invalid_selection_or_value(self):
-        for values in ([True,'nan']+[False,'']*9, [True,'']+[False,'']*9,
-                       [1,'0.2']+[False,'']*9, [True,'0.2']):
+    def test_bridge_improvement_rejects_unknown_structure(self):
+        for values in ([1,'0.2']+[False,'']*9, [True,'0.2']):
             with self.subTest(values=values),self.assertRaises(c.ConversionError):
                 c.adapt_measure_definitions([['Pilar','Mejora de Puentes Térmicos',values]],c.Audit(),'prueba')
+
+    def test_improvement_definitions_preserve_incomplete_values(self):
+        for value in ('', 'nan', 'sin dato'):
+            definitions = [
+                ['Pilar', 'Mejora de Puentes Térmicos', [True,value]+[False,'']*9],
+                ['Aislamiento', 'Adición de Aislamiento Térmico',
+                 [True,False,False,True,False,False,value,'','','',True,['0.01']*7,[False]*4]]]
+            with self.subTest(value=value):
+                self.assertEqual(c.adapt_measure_definitions(definitions,c.Audit(),'prueba'), definitions)
 
     def test_negative_new_area_is_rejected(self):
         self.src[2][22]='-1'
@@ -750,6 +788,49 @@ class ConverterTests(unittest.TestCase):
                 result.output.unlink()
         self.src[4][5][0][8] = [True,'200','60','50','51.9','Modo desconocido','10']
         self.assertFailure('E_SYSTEM_TAIL')
+    def test_acs_incomplete_values_preserved_in_base_and_all_measure_copies(self):
+        tanks = ([True,'190','80','60','1.6','Conocido'],
+                 [True,'200','60','35','0.9','Estimado','0.05','Poliuretano Rígido','1.0'],
+                 [True,'200','60','35','0.9','Por defecto','10'])
+        for original in tanks:
+            for field in range(1, len(original)):
+                if field == 5: continue  # El metodo determina la estructura.
+                tank = list(original); tank[field] = c.LegacyString('')
+                with self.subTest(mode=original[5], field=field):
+                    self.src[4][5][0][8] = tank
+                    measure = self.fixture_measure('Mejora ACS')
+                    systems = copy.deepcopy(self.src[4][:12])
+                    measure.state['mejoras'][1][1] = systems
+                    measure.state['datosInstalaciones'] = systems
+                    for key, entries in zip(c.MM_SYSTEM_KEYS, systems):
+                        measure.state[key] = entries
+                    self.src[5] = [measure]
+                    code, run = self.run_convert()
+                    self.assertEqual(code, 0, run.summary)
+                    dst = c.read_cex(run.output)
+                    mm = dst[5][0].state
+                    for rows in (dst[4], mm['mejoras'][1][1], mm['datosInstalaciones']):
+                        self.assertEqual(c.typed_value(rows[5][0][8]), c.typed_value(tank))
+                    self.assertEqual(c.typed_value(mm['sistemasMixto3MM'][0][8]), c.typed_value(tank))
+                    self.assertEqual(mm['analisisEconomico'].state['inversionInicial'], [8000.0])
+                    self.assertEqual(c.typed_value(c.read_cex(self.source_path)), c.typed_value(self.src))
+                    run.output.unlink()
+
+    def test_measure_empty_tank_never_inherits_base_volume(self):
+        self.src[4][5][0][8] = [True,'190','80','60','1.6','Conocido']
+        measure = self.fixture_measure('Mejora ACS')
+        systems = copy.deepcopy(self.src[4][:12])
+        systems[5][0][8][1] = ''
+        measure.state['mejoras'][1][1] = systems
+        self.src[5] = [measure]
+        code, run = self.run_convert()
+        self.assertEqual(code, 0, run.summary)
+        dst = c.read_cex(run.output)
+        self.assertEqual(dst[4][5][0][8][1], '190')
+        self.assertEqual(dst[5][0].state['mejoras'][1][1][5][0][8][1], '')
+        self.assertTrue(any(e['code']=='W_NATIVE_VALUE' and e['path'].endswith('.volumen')
+                            for e in run.audit.events))
+
     def test_solar_stale_choice_and_changed_file_rejected(self):
         self.solar_fixture();code,a=self.solar_convert({'unknown':'omit'})
         self.assertEqual(code,1)
@@ -861,13 +942,13 @@ class ConverterTests(unittest.TestCase):
         system = self.src[4][5][0]
         system[9] = ['200', '200', '200']
         system[8][6] = '1'
-        self.src[12]['Icaen'] = 'Configuración que se perderá'
+        self.src[12]['Icaen'] = 'Configuración que se conserva'
         code, analysis = self.run_convert()
         self.assertEqual(code, 2, analysis.summary)
         before = c.sha(self.source_path)
         self.assertFalse(analysis.output.exists())
         expected = {'edificio.solar', 'administrativos[26]', 'generales[22]',
-                    'instalaciones[5][0][9]', 'complementos.Icaen'}
+                    'instalaciones[5][0][9]'}
         self.assertEqual({item['path'] for item in analysis.audit.losses}, expected)
         commands = [{'command':'convert','source':str(self.source_path),'template':str(self.template_path)},
                     {'command':'decision','id':analysis.manifest['pending_plan']['id'],'choice':'omit'}]

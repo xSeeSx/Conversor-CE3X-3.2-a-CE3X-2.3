@@ -52,7 +52,7 @@ Esta tabla es **inventario parcial**, no una lista completa de todas las opcione
 | Autoconsumo mensual renovable | **Experimental** para la serie nativa EPB de doce meses no negativos y sin mejoras. Si existe balance calculado, debe coincidir. Se pierde la serie, potencia e identificador. Producción total, excedentes y series con estructura diferente quedan fuera. |
 | Aire primario, recuperadores y ventiladores | **Bloqueado** en residencial. El manual sitúa los paneles correspondientes en terciario. La tasa de renovación no puede representar el equipo ni su consumo auxiliar. |
 | Mejora de envolvente y solar de ACS | **Experimental** con equipo de ACS admitido, zona, caudal y superficie invariantes, definiciones coherentes y copias reconocidas. Se conservan actuaciones, costes y referencias. |
-| Depósitos de ACS | **Conservación** para UA conocido, por defecto y estimado por aislamiento, incluido el multiplicador y con su estructura nativa. Métodos desconocidos bloquean. La adaptación termosolar con depósitos sigue fuera de alcance. |
+| Depósitos de ACS | **Conservación** para UA conocido, por defecto y estimado por aislamiento, incluido el multiplicador y con su estructura nativa. Los campos vacíos o incoherentes se conservan con aviso (1.6.1), sin completar desde el edificio base. Métodos desconocidos bloquean. La adaptación termosolar con depósitos sigue fuera de alcance. |
 
 [Fuentes y detalle de los ensayos](EQUIVALENCIAS_Y_LIMITES.md)
 
@@ -73,3 +73,8 @@ Esta tabla es **inventario parcial**, no una lista completa de todas las opcione
 5. README solo comunica el ámbito real en una frase; el detalle vive en esta matriz y en `docs/EQUIVALENCIAS_Y_LIMITES.md`.
 
 **Implementa y valida fórmulas o tablas generalizables en el código, no listas de excepciones basadas en ejemplos.** **No bloquees por una condición arbitraria copiada del único ejemplo**, como `color=="Blanco"` o `zona=="D2"`, **si la equivalencia es independiente de ella**. Pero **no elimines esa condición** hasta revisar de dónde salen los parámetros efectivos y probar la hipótesis. Si el dato simplemente no existe en 2.3, documentar la pérdida y cuál es el sustituto aceptado.
+
+En 1.6.1 el bloque común de complementos se conserva como datos opacos, tanto
+texto como estructuras compuestas (Isover/Ursa). Las clases exclusivas siguen
+bloqueadas. Conservación comprobada por relectura; ejecución de los complementos
+en 2.3 pendiente.

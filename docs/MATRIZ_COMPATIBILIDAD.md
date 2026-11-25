@@ -35,7 +35,7 @@ La matriz recoge las reglas y su evidencia. **E** indica transferencia directa c
 | 8. Biblioteca de cerramientos | `LibreriasCE3X.menuCerramientos.composicionCerramiento` | E / ? | N23 y R. Se conserva el bloque tipado. Quedan por contrastar catálogos 3.2 independientes de materiales, vidrios y marcos. |
 | 9 y 10. Sombras | Registros de polígonos y coeficientes y lista de nombres | E | O32, R y V. Conservación tipada y comprobación de referencias de huecos y cerramientos. [Fixture](../fuentes/fixtures/sombras_oficiales.json) |
 | 11. Informe | Selecciones de mejora, texto y fechas en los siete campos comunes | E / S | O32 y R. Se conserva informe vacío o nativo. Se retira el octavo campo vacío y se bloquea si está activo. |
-| 12. Complementos | Diccionario de entradas por nombre, caso `Icaen` observado | S / ? | O32 y R. Reinicio de entradas escalares con consentimiento. Estructuras compuestas se bloquean. |
+| 12. Complementos | Diccionario común con texto o datos compuestos, incluidos Isover y Ursa | E / ? | R (1.6.1). Conservación opaca del bloque, tipos y referencias. Las clases exclusivas sin regla se bloquean. Funcionamiento interno de cada complemento pendiente de comprobación nativa. |
 | 13 y 14. Reservados | Indicador 13 y token de 32 bytes en Base64 14 | ? | O32, N23 y R. Se conserva el 13 cuando coincide con la plantilla y se registra la sustitución del token con forma conocida. El significado interno sigue pendiente. |
 
 ## Cerramientos
@@ -67,3 +67,26 @@ Todos los registros de esta tabla están contrastados en P23 y cubiertos por R. 
 | [13] Generación eléctrica renovable mensual sin mejoras | Experimental / N | El panel mensual guarda doce valores de autoconsumo EPB. Se suman para el campo eléctrico anual nativo 2.3. Se pierde potencia, identificador y serie mensual. Otras series y dependencias de mejora quedan bloqueadas. |
 
 Cada nueva equivalencia deberá partir de una pareja nativa probada en ambas versiones. Consulta los [ensayos y límites de la sesión 2](EQUIVALENCIAS_Y_LIMITES.md) y el [banco de validación](VALIDACION_REAL.md).
+
+
+## Conservación de datos incompletos (1.6.1)
+
+La conversión de campos comunes es una transferencia de datos, no una
+validación de la calidad física del certificado. Los valores numéricos vacíos,
+no numéricos o fuera de rango se conservan con `W_NATIVE_VALUE`. El resumen y
+el diagnóstico identifican sus rutas. No se rellenan desde la plantilla, el
+edificio base ni otras copias. No se pide consentimiento por conservarlos.
+
+Esto incluye superficie y altura generales, áreas y transmitancias de la
+envolvente, puentes y entradas de mejoras, y volumen, consignas, UA, aislamiento
+y multiplicador de depósitos ACS con estructura nativa reconocida. Las
+conversiones de representación numérica exigidas por 2.3 se mantienen cuando
+el dato es válido. Los formatos y métodos desconocidos siguen bloqueados.
+`as_num` sigue siendo estricto para las fórmulas de adaptación de elementos
+nuevos de 3.2; esta corrección no habilita adaptaciones con entradas inválidas.
+
+Evidencia: posiciones de depósito comunes documentadas en la validación 1.6.0
+y pruebas sintéticas en `fuentes/test_converter.py`, incluida escritura y
+relectura de los tres métodos, todas las copias de instalaciones de mejora,
+costes y conservación del original. No se ha ensayado el recálculo nativo de
+un depósito incompleto: debe completarse si lo exige CE3X 2.3.
