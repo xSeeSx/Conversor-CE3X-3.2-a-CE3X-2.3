@@ -11,6 +11,7 @@ Convierte archivos `.cex` **residenciales** de CE3X 3.2 para abrirlos en CE3X 2.
 3. Abre `nombre_CE3X2.3.cex` en CE3X 2.3 y **recalcula** antes de emitir informes.
 
 El original no se modifica. El resultado se guarda junto a él. La conversión se realiza localmente.
+Al abrir, busca versiones nuevas en GitHub sin bloquear el programa. También puedes pulsar **Buscar actualizaciones**; el aviso abre la página de descarga. Sin conexión puedes seguir convirtiendo.
 
 ## Qué funciona y qué falta
 
@@ -24,6 +25,8 @@ El original no se modifica. El resultado se guarda junto a él. La conversión s
 | Complementos (Isover, Ursa y otros) | Se conserva su bloque de datos, incluido texto y estructuras compuestas; revisar con el complemento instalado |
 | Depósitos de ACS | Conserva todos los campos nativos, incluidos vacíos, UA, método y multiplicador |
 | Aire primario, recuperadores y ventiladores | Bloqueados en residencial por falta de un campo equivalente en 2.3 |
+
+**Los avisos identifican la mejora y los equipos, huecos o cerramientos afectados por su nombre.** Las repeticiones se agrupan y las rutas internas quedan en el diagnóstico.
 
 **Nunca se eliminan datos activos sin avisar.** El programa detalla las pérdidas y pide confirmación, con **Cancelar** como opción inicial. Si no puede convertir u omitir algo con seguridad, se detiene.
 

@@ -109,6 +109,16 @@ jobs:
           if ($process.ExitCode -ne 0 -or (Get-Content $resultPath -Raw).Trim() -ne 'OK') {
             throw 'Fallo de comunicacion entre el ejecutable y Python.'
           }
+      - name: Probar aviso de actualizaciones sin red
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path _validacion -Force | Out-Null
+          $marker = "$pwd/_validacion/actualizaciones.txt"
+          $preview = "$pwd/_validacion/actualizaciones.bmp"
+          $process = Start-Process -FilePath "$pwd/Conversor_CE3X.exe" -ArgumentList @('--smoke-updates', $marker, $preview) -PassThru -Wait -WindowStyle Hidden
+          if ($process.ExitCode -ne 0 -or (Get-Content $marker -Raw).Trim() -ne 'OK') {
+            throw 'Fallo del aviso de actualizaciones o de la conservacion del estado de conversion.'
+          }
       - name: Probar decisiones desde la interfaz y el motor portatil
         shell: pwsh
         run: |
@@ -203,4 +213,5 @@ jobs:
             _validacion/ejemplos_oficiales.json
             _validacion/bateria_final/resultados.json
             _validacion/aviso_experimental*.bmp
+            _validacion/actualizaciones.*
           retention-days: 14

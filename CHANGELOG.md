@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## 1.6.2 - 2026-11-25
+
+- Avisos agrupados por edificio y mejora, con nombres de equipos, huecos, cerramientos y puentes afectados, descripción de campos y consecuencias. Las rutas internas completas se mantienen en el diagnóstico técnico.
+- Corrección de la interfaz que ocultaba los avisos de datos incompletos tras una conversión correcta.
+- Botón Buscar actualizaciones y aviso al abrir en segundo plano. Consulta únicamente releases públicas estables con paquete de Windows, sin enviar datos del certificado. Descarga mediante la página de la release, sin instalación automática.
+- La falta de conexión no bloquea la conversión. El proceso de consulta es independiente del motor y de su diagnóstico.
+
 ## 1.6.1 - 2026-11-25
 
 - Corregido el rechazo de estructuras compuestas de complementos como Ursa. El bloque común se conserva sin reiniciarlo, también para entradas de texto como Isover. Las clases exclusivas sin correspondencia siguen bloqueadas.

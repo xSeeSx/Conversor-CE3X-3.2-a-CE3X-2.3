@@ -957,10 +957,12 @@ class ConverterTests(unittest.TestCase):
         preview, result = responses.getvalue().strip('\n').split('\n')
         self.assertTrue(preview.startswith('DECISION_EXPERIMENTAL\t'))
         self.assertTrue(result.startswith('REVISAR_CAMBIOS\t'))
-        self.assertIn('CONVERSION_CON_OMISIONES', result)
+        self.assertIn('cambios que debes revisar', result)
         for path in expected:
-            self.assertIn(path, preview)
-            self.assertIn(path, result)
+            self.assertNotIn(path, preview)
+            self.assertNotIn(path, result)
+        self.assertIn('Equipo', preview)
+        self.assertIn('Edificio', result)
         self.assertEqual(c.sha(self.source_path), before)
         self.assertTrue(analysis.output.exists())
 
