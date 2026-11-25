@@ -65,3 +65,5 @@ El motor crea datos inertes al leer el pickle textual: no importa módulos de CE
 El perfil y el esquema de mejoras contienen reglas estructurales, sin valores físicos de proyectos particulares. Los tipos no contrastados se rechazan con un error. Para añadir una regla, compara muestras nativas 3.2 y 2.3 del mismo elemento e incorpora una prueba de regresión.
 
 Las instantáneas de diagnóstico excluyen los bloques administrativos y las imágenes, pero el ZIP puede contener datos técnicos y los adjuntos que el usuario elija. Debe revisarse antes de compartirlo.
+
+La consulta de versiones y los mensajes se describen en [Avisos y actualizaciones](AVISOS_Y_ACTUALIZACIONES.md).

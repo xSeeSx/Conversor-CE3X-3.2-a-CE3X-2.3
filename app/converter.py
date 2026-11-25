@@ -24,7 +24,9 @@ import tempfile
 import zipfile
 from dataclasses import dataclass, field
 
-VERSION = '1.6.1'
+VERSION = '1.6.2'
+RELEASES_URL = 'https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases'
+UPDATE_API = 'https://api.github.com/repos/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/releases/latest'
 ROOT = Path(__file__).resolve().parent
 MAX_BYTES = 64 * 1024 * 1024
 BLOCK_NAMES = ['version', 'administrativos', 'generales', 'envolvente', 'instalaciones',
@@ -310,6 +312,25 @@ class Audit:
     def __init__(self, run=None):
         self.stage = 'inicio'
         self.events, self.changes, self.omitted = [], [], []
+        self.subjects, self.measure_names = {}, {}
+
+    def label(self, path, element='Edificio'):
+        match = re.match(r'medidas_mejora\[(\d+)\]', path)
+        if match:
+            name = self.measure_names.get(int(match[1]), element)
+            context = f'Mejora "{name}"'
+            if '.datosEdificioOriginal' in path: context += ' / Edificio original'
+            elif '.datosNuevoEdificio' in path: context += ' / Edificio con la mejora'
+        else:
+            context = 'Datos administrativos' if path.startswith('administrativos') else 'Edificio'
+        candidates = [prefix for prefix in self.subjects
+                      if path == prefix or path.startswith(prefix+'.') or path.startswith(prefix+'[')]
+        if candidates:
+            subject = self.subjects[max(candidates, key=len)]
+            context += ' / '+subject
+        elif not match and element not in ('Edificio', 'Datos administrativos', path):
+            context += ' / '+str(element)
+        return context
 
     def event(self, level, code, message, **data):
         self.events.append({'time': dt.datetime.now().astimezone().isoformat(), 'level': level,
@@ -328,7 +349,8 @@ class Audit:
             snapshot = json_value(value)
         self.omitted.append({'path': path, 'value': snapshot, 'reason': reason,
                              'risk': risk, 'element': element or path, 'dependencies': dependencies,
-                             'count': count, 'operation': operation, 'destination': 'CE3X 2.3'})
+                             'count': count, 'operation': operation, 'destination': 'CE3X 2.3',
+                             'display_element': self.label(path, element or 'Edificio')})
 
     def loss(self, path, value, reason, *, risk='modelo', **details):
         self.omit(path, value, reason, risk='formato' if inactive(value) else risk, **details)
@@ -409,6 +431,7 @@ def validate(blocks, audit, profile, target=False):
             raise ConversionError('E_ENVELOPE_UNKNOWN', f'Tipo de cerramiento sin regla contrastada: {key}',p)
         require(len(e)==expected,'E_ENVELOPE_ROW',f'{key}: esperados {expected} campos; hay {len(e)}',p)
         require(isinstance(e[0],str) and e[0],'E_NAME','Nombre de cerramiento vacio',p)
+        audit.subjects[p] = f'Cerramiento "{e[0]}"'
         names.append(e[0])
         check_native_number(e[2],p+'.superficie',audit,minimum=0)
         check_native_number(e[3],p+'.U',audit,minimum=0)
@@ -423,6 +446,7 @@ def validate(blocks, audit, profile, target=False):
         require(isinstance(w,CexObject) and w.cls.module=='Envolvente.objetosEnvolvente' and w.cls.name in ('HuecoConocidas','HuecoEstimadas'),
                 'E_WINDOW_CLASS','Clase de hueco desconocida',p)
         state=w.state
+        audit.subjects[p] = f'Hueco "{state.get("descripcion", "sin nombre")}"'
         for key in ('descripcion','cerramientoAsociado','superficie','elementosProteccionSolar'):
             require(key in state,'E_WINDOW_FIELD',f'Falta {key}',p)
         require(state['cerramientoAsociado'] in names,'E_WINDOW_REFERENCE','Hueco sin cerramiento asociado',p)
@@ -440,6 +464,7 @@ def validate(blocks, audit, profile, target=False):
     for i,b in enumerate(bridges):
         p=f'envolvente.puentes[{i}]'
         require(isinstance(b,list) and len(b)==9,'E_BRIDGE','Puente termico de formato desconocido',p)
+        audit.subjects[p] = f'Puente térmico "{b[0]}"'
         require(b[7] in names,'E_BRIDGE_REFERENCE','Puente termico sin cerramiento asociado',p)
         check_native_number(b[3],p+'.psi',audit)
         check_native_number(b[4],p+'.longitud',audit,minimum=0)
@@ -470,6 +495,8 @@ def adapt_systems(source, audit, profile, path_prefix='instalaciones'):
         for i,entry in enumerate(group):
             p=f'{path_prefix}[{g}][{i}]'
             require(isinstance(entry,list),'E_SYSTEM_ROW','Registro de instalacion invalido',p)
+            if entry:
+                audit.subjects[p] = f'Equipo "{entry[0]}"'
             if g==6:
                 require(len(entry)==6 and entry[1] in ('renovable','Contribuciones energéticas'),
                         'E_CONTRIBUTION','Contribucion sin equivalencia contrastada',p)
@@ -657,6 +684,7 @@ def convert_measures(measures,economics,profile,audit):
         require(isinstance(m.state.get('nombre'),str) and m.state['nombre'],
                 'E_MM_NAME','Nombre del conjunto vacio',p)
         names.append(m.state['nombre'])
+        audit.measure_names[i] = m.state['nombre']
         for key in ('listadoGeneradoresElectricoMM','listadoGeneradoresTermosolarMM'):
             require(empty(m.state.get(key)),'E_MM_GENERATOR','Generador nuevo sin equivalencia 2.3',p+'.'+key)
     require(len(set(names))==len(names),'E_MM_NAME','Conjuntos con nombres duplicados')
@@ -672,6 +700,13 @@ def convert_measures(measures,economics,profile,audit):
             extras=set(state)-set(schema[cls])
             if value.cls==group_cls:
                 element = state['nombre']
+            subject_kinds = {'Cerramiento':'Cerramiento', 'PuenteTermico':'Puente térmico',
+                             'EquipoGeneracion':'Equipo', 'ContribucionesEnergeticas':'Contribución',
+                             'HuecoConocidas':'Hueco', 'HuecoEstimadas':'Hueco'}
+            if value.cls.name in subject_kinds:
+                name = state.get('nombre') or state.get('descripcion') or state.get('tipo')
+                if name:
+                    audit.subjects[path] = f'{subject_kinds[value.cls.name]} "{name}"'
             for key in sorted(extras, key=str):
                 audit_measure_extra(audit, cls, key, state[key], path+'.'+str(key), element)
             if value.cls==group_cls:
@@ -1379,10 +1414,95 @@ def consent_token(manifest, choices, losses):
 
 
 def describe_losses(losses):
-    return '\n'.join(
-        f"- {item['risk'].capitalize()} | {item['element']} | {item['count']} | "
-        f"{item['operation'].capitalize()} {item['reason']} ({item['path']}). {item['dependencies']}."
-        for item in losses)
+    """Inventario para personas. Las rutas y valores íntegros siguen en el diagnóstico."""
+    field_names = {
+        'ordenPrioridad':'orden de prioridad', 'seRecomienda':'marca de mejora recomendada',
+        'justificacion':'justificación de la mejora',
+        'listadoEspacios':'espacios', 'listadoMarco':'marcos', 'listadoVidrio':'vidrios',
+        'listadoMateriales':'materiales', 'listadoSombras':'sombras',
+        'listadoSistemasConstructivos':'soluciones constructivas de cerramientos',
+        'listadoSistemasConstructivosHuecos':'soluciones constructivas de huecos',
+        'nombreSistemaConstructivo':'nombre de la solución constructiva en el cálculo guardado',
+        'modoDeObtencion':'método de obtención del puente térmico en el cálculo guardado',
+        'caracteristicaBdC':'característica adicional de la bomba de calor',
+        'servicio':'servicio del equipo en el cálculo guardado',
+        'esGenerador':'marca de generador en el cálculo guardado', 'potencia':'potencia adicional',
+    }
+    groups = {}
+    for item in losses:
+        path = item['path']
+        context = item.get('display_element') or str(item['element'])
+        parts = context.split(' / ')
+        subject = ''
+        if len(parts) > 1 and parts[-1].startswith(('Cerramiento "', 'Puente térmico "', 'Equipo "', 'Hueco "', 'Contribución "')):
+            subject = parts.pop()
+            context = ' / '.join(parts)
+        key = path.rsplit('.', 1)[-1]
+        if item['reason'] == 'Campo general exclusivo de CE3X 3.2':
+            description = 'Campos generales adicionales de 3.2 sin casilla en 2.3'
+        elif item['reason'] == 'Campo administrativo exclusivo de CE3X 3.2':
+            description = 'Campos administrativos adicionales de 3.2 sin casilla en 2.3'
+        elif item['reason'] == 'Tres campos adicionales de instalacion 3.2':
+            description = 'Tres parámetros adicionales del equipo que 2.3 no admite'
+        elif key in field_names:
+            description = field_names[key].capitalize()
+            if key in MM_LIBRARIES:
+                unit = 'registro' if item['count'] == 1 else 'registros'
+                description = f'Biblioteca auxiliar de {field_names[key]} ({item["count"]} {unit})'
+        else:
+            description = item['reason'].rstrip('.')
+        action = {'omitir':'Se omite', 'reiniciar':'Se reinicia', 'sustituir':'Se sustituye',
+                  'adaptar':'Se adapta', 'adaptar experimentalmente':'Adaptación experimental de'}.get(
+                      item['operation'], item['operation'].capitalize())
+        # Agrupar las copias repetidas del mismo dato, conservando todos los
+        # elementos con nombre y todas las consecuencias distintas.
+        group = groups.setdefault(context, {})
+        entry = group.setdefault((action, description, item['dependencies']), [])
+        entry.append((item, subject))
+    lines = []
+    for context, entries in groups.items():
+        lines.append(context)
+        consequences = []
+        for (action, description, consequence), items in entries.items():
+            unit = 'campos' if 'Campos generales' in description or 'Campos administrativos' in description else 'apariciones en los datos guardados'
+            suffix = f' ({len(items)} {unit})' if len(items) > 1 else ''
+            lines.append(f'  - {action}: {description}{suffix}.')
+            subjects = list(dict.fromkeys(subject for item, subject in items if subject))
+            if subjects:
+                lines.append('    Afecta a: '+', '.join(subjects)+'.')
+            if consequence and consequence not in consequences:
+                consequences.append(consequence)
+        for consequence in consequences:
+            lines.append('    '+consequence.rstrip('.')+'.')
+        lines.append('')
+    return '\n'.join(lines).rstrip()
+
+
+def check_updates():
+    """Consulta pública acotada; no lee ni transmite certificados o diagnósticos."""
+    import urllib.request
+    try:
+        request = urllib.request.Request(UPDATE_API, headers={
+            'Accept':'application/vnd.github+json', 'User-Agent':'Conversor-CE3X/'+VERSION})
+        with urllib.request.urlopen(request, timeout=4) as response:
+            raw = response.read(131073)
+        if len(raw) > 131072:
+            raise ValueError('Respuesta demasiado larga')
+        release = json.loads(raw)
+        tag = release.get('tag_name', '')
+        match = re.fullmatch(r'v(\d{1,5})\.(\d{1,5})\.(\d{1,5})', tag)
+        if not match or release.get('draft') is not False or release.get('prerelease') is not False:
+            raise ValueError('No es una version publica estable')
+        version = '.'.join(match.groups())
+        package = 'Conversor_CE3X_Windows_'+version.replace('.', '_')+'.zip'
+        if not any(asset.get('name') == package and asset.get('state') == 'uploaded'
+                   and isinstance(asset.get('size'), int) and asset['size'] > 0
+                   for asset in release.get('assets', [])):
+            raise ValueError('No hay paquete de Windows publicado')
+        status = 'UPDATE' if tuple(map(int, match.groups())) > tuple(map(int, VERSION.split('.'))) else 'CURRENT'
+        return status+'\t'+version
+    except Exception:
+        return 'UNAVAILABLE\t'
 
 
 def convert(source, template, profile_path=None, fix_accents=True, overwrite=False, solar_choices=None,
@@ -1507,12 +1627,24 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
                                      if event['code'] == 'W_NATIVE_VALUE'})
         if preserved_warnings:
             manifest['preserved_value_warnings'] = preserved_warnings
-            attempt.summary += (' Hay datos originales incompletos o incoherentes conservados sin cambios: '
-                                + ', '.join(preserved_warnings[:3])
-                                + ('; listado completo en el diagnostico' if len(preserved_warnings) > 3 else '') + '.')
+            labels = []
+            fields = {'volumen':'volumen del depósito', 'consigna_alta':'temperatura máxima del depósito',
+                      'consigna_baja':'temperatura mínima del depósito', 'UA':'pérdidas térmicas del depósito (UA)',
+                      'espesor_aislamiento':'espesor de aislamiento', 'multiplicador':'multiplicador del depósito',
+                      'material_aislamiento':'material de aislamiento', 'superficie':'superficie',
+                      'altura':'altura', 'U':'transmitancia térmica', 'Uvidrio':'transmitancia del vidrio',
+                      'Umarco':'transmitancia del marco', 'Gvidrio':'factor solar del vidrio',
+                      'psi':'transmitancia lineal', 'longitud':'longitud'}
+            for path in preserved_warnings:
+                field_name = fields.get(path.rsplit('.',1)[-1], 'dato incompleto o incoherente')
+                label = audit.label(path)+': '+field_name
+                if label not in labels: labels.append(label)
+            attempt.summary += ('\nDatos pendientes conservados sin cambios. Revísalos en CE3X 2.3:\n'
+                                + '\n'.join('- '+label for label in labels))
+
         if audit.losses:
             decisions = manifest.get('decision_summary', '')
-            manifest['decision_summary'] = ('CONVERSION_CON_OMISIONES\n' + decisions + '\n'
+            manifest['decision_summary'] = ('Conversión completada con cambios que debes revisar.\n' + decisions + '\n'
                                             + describe_losses(audit.losses)
                                             + '\nRevisar y recalcular en CE3X 2.3.')
     except Exception as exc:
@@ -1543,7 +1675,7 @@ def serve(stream_in=None, stream_out=None):
         fits = len(line.encode('utf-8')) < 131072
         if not fits:
             status = ('ERROR' if status.startswith('DECISION_') else status)
-            prefix = 'CONVERSION_CON_OMISIONES. ' if status == 'REVISAR_CAMBIOS' else ''
+            prefix = 'Archivo generado con cambios que debes revisar. ' if status == 'REVISAR_CAMBIOS' else ''
             line = f'{status}\t{clean(path) if status != "ERROR" else ""}\t{prefix}El inventario completo excede la vista. Guarda el diagnostico para consultarlo.\n'
         stream_out.write(line)
         stream_out.flush()
@@ -1636,8 +1768,12 @@ def main(argv=None):
     p.add_argument('--fix-accents', action='store_true', default=True, help=argparse.SUPPRESS)
     sub.add_parser('self-test')
     sub.add_parser('serve')
+    sub.add_parser('check-updates')
     a = parser.parse_args(argv)
     try:
+        if a.command == 'check-updates':
+            print(check_updates())
+            return 0
         if a.command == 'self-test':
             self_test()
             return 0

@@ -11,6 +11,15 @@ no hay correspondencia. Nunca copiar valores del edificio base a una mejora
 para suplir datos ausentes. Mantener pruebas de conservacion tras releer el CEX.
 
 
+## Mensajes para técnicos
+
+Los avisos visibles deben identificar edificio o mejora y los elementos por su
+nombre real: equipo, cerramiento, hueco o puente térmico. Explicar qué campo
+cambia, qué se pierde y qué se conserva. Agrupar copias y repeticiones; reservar
+rutas internas, códigos y estructuras para el diagnóstico técnico. No inventar
+el significado de campos sin documentación. Probar que los mensajes conservan
+todas las consecuencias y que el inventario completo sigue exportándose.
+
 ## Fórmulas y límites ya investigados
 
 Antes de investigar las equivalencias P0-P3, lee [docs/FORMULAS_EQUIVALENCIAS_PENDIENTES.md](docs/FORMULAS_EQUIVALENCIAS_PENDIENTES.md). Contiene ecuaciones, unidades, contraejemplos y pruebas de recuperadores, ventiladores, generación eléctrica mensual, persianas y solar térmica. **Reutilizar y contrastar** en los ejecutables nativos, sin gastar una sesión repitiendo derivaciones físicas. Las fórmulas candidatas no son adaptaciones activas.
