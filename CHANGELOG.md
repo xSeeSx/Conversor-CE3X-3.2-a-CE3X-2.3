@@ -1,5 +1,11 @@
 # Historial de cambios
 
+## 1.6.1 - 2026-11-25
+
+- Corregida la cancelación por volumen vacío de un depósito de ACS en una medida de mejora. Se conserva el vacío, sin copiar datos del edificio base.
+- Los valores numéricos incompletos o incoherentes de campos comunes se conservan con aviso, tanto en el edificio como en las mejoras. Se mantienen las comprobaciones de estructura y las entradas estrictas para calcular adaptaciones de elementos nuevos de 3.2.
+- Regresiones de conservación tras escritura y relectura, incluidos los tres métodos de depósito y sus copias en las mejoras.
+
 ## 1.6.0 - 2026-11-19
 
 - Persiana manual aislada de cualquier color mediante los factores estacionales guardados. La adaptación experimental avisa de que el factor CTE pasa a 1.

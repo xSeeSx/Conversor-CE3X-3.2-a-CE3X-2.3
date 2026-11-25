@@ -52,7 +52,7 @@ Esta tabla es **inventario parcial**, no una lista completa de todas las opcione
 | Autoconsumo mensual renovable | **Experimental** para la serie nativa EPB de doce meses no negativos y sin mejoras. Si existe balance calculado, debe coincidir. Se pierde la serie, potencia e identificador. Producción total, excedentes y series con estructura diferente quedan fuera. |
 | Aire primario, recuperadores y ventiladores | **Bloqueado** en residencial. El manual sitúa los paneles correspondientes en terciario. La tasa de renovación no puede representar el equipo ni su consumo auxiliar. |
 | Mejora de envolvente y solar de ACS | **Experimental** con equipo de ACS admitido, zona, caudal y superficie invariantes, definiciones coherentes y copias reconocidas. Se conservan actuaciones, costes y referencias. |
-| Depósitos de ACS | **Conservación** para UA conocido, por defecto y estimado por aislamiento, incluido el multiplicador y con su estructura nativa. Métodos desconocidos bloquean. La adaptación termosolar con depósitos sigue fuera de alcance. |
+| Depósitos de ACS | **Conservación** para UA conocido, por defecto y estimado por aislamiento, incluido el multiplicador y con su estructura nativa. Los campos vacíos o incoherentes se conservan con aviso (1.6.1), sin completar desde el edificio base. Métodos desconocidos bloquean. La adaptación termosolar con depósitos sigue fuera de alcance. |
 
 [Fuentes y detalle de los ensayos](EQUIVALENCIAS_Y_LIMITES.md)
 

@@ -67,3 +67,26 @@ Todos los registros de esta tabla están contrastados en P23 y cubiertos por R. 
 | [13] Generación eléctrica renovable mensual sin mejoras | Experimental / N | El panel mensual guarda doce valores de autoconsumo EPB. Se suman para el campo eléctrico anual nativo 2.3. Se pierde potencia, identificador y serie mensual. Otras series y dependencias de mejora quedan bloqueadas. |
 
 Cada nueva equivalencia deberá partir de una pareja nativa probada en ambas versiones. Consulta los [ensayos y límites de la sesión 2](EQUIVALENCIAS_Y_LIMITES.md) y el [banco de validación](VALIDACION_REAL.md).
+
+
+## Conservación de datos incompletos (1.6.1)
+
+La conversión de campos comunes es una transferencia de datos, no una
+validación de la calidad física del certificado. Los valores numéricos vacíos,
+no numéricos o fuera de rango se conservan con `W_NATIVE_VALUE`. El resumen y
+el diagnóstico identifican sus rutas. No se rellenan desde la plantilla, el
+edificio base ni otras copias. No se pide consentimiento por conservarlos.
+
+Esto incluye superficie y altura generales, áreas y transmitancias de la
+envolvente, puentes y entradas de mejoras, y volumen, consignas, UA, aislamiento
+y multiplicador de depósitos ACS con estructura nativa reconocida. Las
+conversiones de representación numérica exigidas por 2.3 se mantienen cuando
+el dato es válido. Los formatos y métodos desconocidos siguen bloqueados.
+`as_num` sigue siendo estricto para las fórmulas de adaptación de elementos
+nuevos de 3.2; esta corrección no habilita adaptaciones con entradas inválidas.
+
+Evidencia: posiciones de depósito comunes documentadas en la validación 1.6.0
+y pruebas sintéticas en `fuentes/test_converter.py`, incluida escritura y
+relectura de los tres métodos, todas las copias de instalaciones de mejora,
+costes y conservación del original. No se ha ensayado el recálculo nativo de
+un depósito incompleto: debe completarse si lo exige CE3X 2.3.

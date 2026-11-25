@@ -24,7 +24,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass, field
 
-VERSION = '1.6.0'
+VERSION = '1.6.1'
 ROOT = Path(__file__).resolve().parent
 MAX_BYTES = 64 * 1024 * 1024
 BLOCK_NAMES = ['version', 'administrativos', 'generales', 'envolvente', 'instalaciones',
@@ -295,6 +295,17 @@ def as_num(value, path, minimum=None):
         raise ConversionError('E_NUMBER', f'Valor numerico invalido: {value!r}', path) from exc
 
 
+def check_native_number(value, path, audit, minimum=None):
+    """Comprueba sin modificar ni bloquear un dato comun que solo se transfiere."""
+    try:
+        return as_num(value, path, minimum)
+    except ConversionError as exc:
+        audit.event('WARNING', 'W_NATIVE_VALUE',
+                    'Dato original conservado sin corregir; revisar en CE3X 2.3: '+str(exc),
+                    path=path, value=json_value(value))
+        return None
+
+
 class Audit:
     def __init__(self, run=None):
         self.stage = 'inicio'
@@ -383,8 +394,8 @@ def validate(blocks, audit, profile, target=False):
     if target:
         require(len(blocks[1])==26 and len(blocks[2])==21,'E_FIELDS','Longitud de destino incorrecta')
         require(len(blocks[4])==12,'E_SYSTEM_GROUPS','Se esperaban 12 grupos en 2.3')
-    as_num(blocks[2][6],'generales.superficie',minimum=.01)
-    as_num(blocks[2][7],'generales.altura',minimum=.01)
+    check_native_number(blocks[2][6],'generales.superficie',audit,minimum=.01)
+    check_native_number(blocks[2][7],'generales.altura',audit,minimum=.01)
     env, windows, bridges, subs = blocks[3]
     names=[]
     compositions={str(x.state.get('nombre')) for x in blocks[8] if isinstance(x,CexObject)}
@@ -399,8 +410,8 @@ def validate(blocks, audit, profile, target=False):
         require(len(e)==expected,'E_ENVELOPE_ROW',f'{key}: esperados {expected} campos; hay {len(e)}',p)
         require(isinstance(e[0],str) and e[0],'E_NAME','Nombre de cerramiento vacio',p)
         names.append(e[0])
-        as_num(e[2],p+'.superficie',minimum=0)
-        as_num(e[3],p+'.U',minimum=0)
+        check_native_number(e[2],p+'.superficie',audit,minimum=0)
+        check_native_number(e[3],p+'.U',audit,minimum=0)
         if e[8]=='Conocidas' and e[6] and e[6] not in compositions:
             audit.event('WARNING','W_COMPOSITION',f'Composicion no encontrada: {e[6]}',path=p)
         if e[7] and e[7] not in shadows:
@@ -415,9 +426,9 @@ def validate(blocks, audit, profile, target=False):
         for key in ('descripcion','cerramientoAsociado','superficie','elementosProteccionSolar'):
             require(key in state,'E_WINDOW_FIELD',f'Falta {key}',p)
         require(state['cerramientoAsociado'] in names,'E_WINDOW_REFERENCE','Hueco sin cerramiento asociado',p)
-        as_num(state['superficie'],p+'.superficie',minimum=0)
+        check_native_number(state['superficie'],p+'.superficie',audit,minimum=0)
         for key in ('Uvidrio','Umarco','Gvidrio'):
-            if key in state: as_num(state[key],p+'.'+key,minimum=0)
+            if key in state: check_native_number(state[key],p+'.'+key,audit,minimum=0)
         if state.get('patronSombras') and state['patronSombras'] not in shadows:
             raise ConversionError('E_SHADOW_REFERENCE','Hueco con patron de sombras inexistente',p)
         window_names.append(state['descripcion'])
@@ -430,8 +441,8 @@ def validate(blocks, audit, profile, target=False):
         p=f'envolvente.puentes[{i}]'
         require(isinstance(b,list) and len(b)==9,'E_BRIDGE','Puente termico de formato desconocido',p)
         require(b[7] in names,'E_BRIDGE_REFERENCE','Puente termico sin cerramiento asociado',p)
-        as_num(b[3],p+'.psi')
-        as_num(b[4],p+'.longitud',minimum=0)
+        check_native_number(b[3],p+'.psi',audit)
+        check_native_number(b[4],p+'.longitud',audit,minimum=0)
     audit.event('INFO','MODEL_COUNTS','Inventario validado',cerramientos=len(env),huecos=len(windows),puentes=len(bridges),subgrupos=len(subs))
 
 
@@ -498,19 +509,26 @@ def adapt_systems(source, audit, profile, path_prefix='instalaciones'):
                         or (mode == 'Por defecto' and len(accumulation) in (6, 7))
                         or (mode == 'Estimado' and len(accumulation) == 9),
                         'E_SYSTEM_TAIL', 'Metodo o campos del deposito ACS sin correspondencia nativa 2.3', tank)
-                volume = as_num(accumulation[1], tank+'.volumen', minimum=0)
-                high = as_num(accumulation[2], tank+'.consigna_alta')
-                low = as_num(accumulation[3], tank+'.consigna_baja')
-                as_num(accumulation[4], tank+'.UA', minimum=0)
-                require(volume > 0 and high >= low, 'E_SYSTEM_TAIL',
-                        'Volumen o consignas del deposito incoherentes', tank)
+                volume = check_native_number(accumulation[1], tank+'.volumen', audit, minimum=0)
+                high = check_native_number(accumulation[2], tank+'.consigna_alta', audit)
+                low = check_native_number(accumulation[3], tank+'.consigna_baja', audit)
+                check_native_number(accumulation[4], tank+'.UA', audit, minimum=0)
+                if (volume is not None and volume <= 0
+                        or high is not None and low is not None and high < low):
+                    audit.event('WARNING', 'W_NATIVE_VALUE',
+                                'Volumen o consignas del deposito incoherentes; se conservan los datos originales.',
+                                path=tank)
                 if mode == 'Estimado':
-                    as_num(accumulation[6], tank+'.espesor_aislamiento', minimum=0)
-                    require(isinstance(accumulation[7], str) and accumulation[7].strip(),
-                            'E_SYSTEM_TAIL', 'Material de aislamiento del deposito desconocido', tank)
+                    check_native_number(accumulation[6], tank+'.espesor_aislamiento', audit, minimum=0)
+                    if not isinstance(accumulation[7], str) or not accumulation[7].strip():
+                        audit.event('WARNING', 'W_NATIVE_VALUE',
+                                    'Material de aislamiento incompleto; se conserva el dato original.',
+                                    path=tank+'.material_aislamiento')
                 if len(accumulation) in (7, 9) and not empty(accumulation[-1]):
-                    require(as_num(accumulation[-1], tank+'.multiplicador', minimum=0) > 0,
-                            'E_SYSTEM_TAIL', 'El multiplicador del deposito debe ser positivo', tank)
+                    multiplier = check_native_number(accumulation[-1], tank+'.multiplicador', audit, minimum=0)
+                    if multiplier == 0:
+                        audit.event('WARNING', 'W_NATIVE_VALUE',
+                                    'Multiplicador nulo; se conserva el dato original.', path=tank+'.multiplicador')
                 audit.event('INFO','DHW_ACCUMULATION','Deposito ACS conservado en el formato nativo.',path=tank,mode=mode)
             if str(entry[6]).startswith('Estimado'):
                 audit.event('WARNING','W_ESTIMATED_SYSTEM',f'{entry[0]} conserva modo y rendimientos estimados. Recalcular en 2.3.',path=p,mode=entry[6],efficiency=json_value(entry[2]))
@@ -609,14 +627,16 @@ def adapt_measure_definitions(definitions,audit,path):
             for j in range(0, 20, 2):
                 require(isinstance(data[j], bool), 'E_MM_DEFINITION', 'Seleccion de puente no booleana', p+f'[2][{j}]')
                 if data[j] or not empty(data[j+1]):
-                    as_num(data[j+1], p+f'[2][{j+1}]')
+                    check_native_number(data[j+1], p+f'[2][{j+1}]', audit)
             # Los ejemplos nativos 2.3 conservan estos valores como texto.
             indices=()
         else:
             raise ConversionError('E_MM_DEFINITION','Tipo de medida sin regla contrastada: '+str(item[1]),p)
         for j in indices:
             if isinstance(data[j],str) and data[j]!='':
-                before=data[j];data[j]=as_num(before,p+f'[2][{j}]')
+                before=data[j];number=check_native_number(before,p+f'[2][{j}]',audit)
+                if number is None: continue
+                data[j]=number
                 audit.change('MM_NUMBER',p+f'[2][{j}]',before,data[j],'Campo numerico nativo 2.3 de medida de mejora')
     return output
 
@@ -1484,6 +1504,13 @@ def convert(source, template, profile_path=None, fix_accents=True, overwrite=Fal
         attempt.summary = (f'Archivo generado. {len(dst[3][0])} cerramientos, {len(dst[3][1])} huecos, '
                            f'{len(dst[3][2])} puentes y {len(dst[5])} conjuntos de mejora. '
                            'Revisar y recalcular en CE3X 2.3.')
+        preserved_warnings = sorted({event['path'] for event in audit.events
+                                     if event['code'] == 'W_NATIVE_VALUE'})
+        if preserved_warnings:
+            manifest['preserved_value_warnings'] = preserved_warnings
+            attempt.summary += (' Hay datos originales incompletos o incoherentes conservados sin cambios: '
+                                + ', '.join(preserved_warnings[:3])
+                                + ('; listado completo en el diagnostico' if len(preserved_warnings) > 3 else '') + '.')
         if audit.losses:
             decisions = manifest.get('decision_summary', '')
             manifest['decision_summary'] = ('CONVERSION_CON_OMISIONES\n' + decisions + '\n'

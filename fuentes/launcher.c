@@ -484,7 +484,7 @@ static void initializeUI(void) {
     headerBrush = CreateSolidBrush(UI_HEADER);
     HWND title = control(L"STATIC", L"Conversor CE3X 3.2 \x2192 2.3", SS_CENTERIMAGE, 36, 31, 688, 33, IDC_TITLE);
     SendMessageW(title, WM_SETFONT, (WPARAM)titleFont, TRUE);
-    HWND version = control(L"STATIC", L"v1.6.0  |  Residencial", 0, 37, 66, 420, 18, IDC_VERSION);
+    HWND version = control(L"STATIC", L"v1.6.1  |  Residencial", 0, 37, 66, 420, 18, IDC_VERSION);
     SendMessageW(version, WM_SETFONT, (WPARAM)smallFont, TRUE);
     control(L"STATIC", L"Archivo de entrada", SS_CENTERIMAGE, 36, 123, 140, 30, IDC_INPUT_LABEL);
     sourceEdit = control(L"EDIT", L"", ES_AUTOHSCROLL | WS_TABSTOP, 182, 123, 403, 30, IDC_SOURCE);
