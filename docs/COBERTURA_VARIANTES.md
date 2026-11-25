@@ -73,3 +73,8 @@ Esta tabla es **inventario parcial**, no una lista completa de todas las opcione
 5. README solo comunica el ámbito real en una frase; el detalle vive en esta matriz y en `docs/EQUIVALENCIAS_Y_LIMITES.md`.
 
 **Implementa y valida fórmulas o tablas generalizables en el código, no listas de excepciones basadas en ejemplos.** **No bloquees por una condición arbitraria copiada del único ejemplo**, como `color=="Blanco"` o `zona=="D2"`, **si la equivalencia es independiente de ella**. Pero **no elimines esa condición** hasta revisar de dónde salen los parámetros efectivos y probar la hipótesis. Si el dato simplemente no existe en 2.3, documentar la pérdida y cuál es el sustituto aceptado.
+
+En 1.6.1 el bloque común de complementos se conserva como datos opacos, tanto
+texto como estructuras compuestas (Isover/Ursa). Las clases exclusivas siguen
+bloqueadas. Conservación comprobada por relectura; ejecución de los complementos
+en 2.3 pendiente.

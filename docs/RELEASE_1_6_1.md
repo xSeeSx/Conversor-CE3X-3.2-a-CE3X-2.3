@@ -14,3 +14,8 @@ campos incompletos es estructural, no una validación de su recálculo en CE3X 2
 
 Descarga el ZIP de Windows y extrae todo antes de ejecutar. Revisa y completa
 los datos pendientes en CE3X 2.3 antes de recalcular y emitir informes.
+
+También corrige `E_ADDON_SCHEMA` para datos compuestos de complementos como
+Ursa. Se conserva el bloque de complementos, sin borrado ni reinicio de sus
+configuraciones. Las clases nuevas sin equivalente siguen bloqueadas. No se
+ha validado el funcionamiento interno de cada complemento en 2.3.

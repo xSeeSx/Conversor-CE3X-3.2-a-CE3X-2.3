@@ -1188,15 +1188,14 @@ def transfer(source, template, profile, audit, fix_accents=True):
         audit.omit('informe[7]',out[11][7],'Campo adicional vacio de 3.2')
         out[11]=out[11][:7]
         audit.change('REPORT_FIELDS','informe.length',8,7,'Retirado campo adicional vacio de informe 3.2')
+    # El bloque comun de complementos se transfiere opaco. Una lista o un
+    # diccionario no justifica borrar configuraciones ni resultados del origen.
     for name, payload in source[12].items():
-        require(isinstance(name, str) and name and scalar(payload),
-                'E_ADDON_SCHEMA', 'Complemento con estructura sin omision segura: '+str(name), 'complementos')
-        audit.omit('complementos.'+name, payload, 'Entrada del bloque de complementos',
-                   risk='usuario', element=name, operation='reiniciar',
-                   dependencies='Regenerar el complemento en CE3X 2.3')
-    out[12]={}
-    if source[12]:
-        audit.change('RESET_ADDONS','blocks[12]','configuracion de complementos','reiniciada','Regenerar complementos en CE3X 2.3')
+        require(isinstance(name, str) and name,
+                'E_ADDON_SCHEMA', 'Nombre de complemento no reconocido', 'complementos')
+        audit.event('INFO', 'ADDON_PRESERVED',
+                    'Datos del complemento conservados sin reinterpretar.',
+                    path='complementos.'+name, payload_type=type(payload).__name__)
     # Dos bloques reservados observados en ficheros nativos. No se interpretan.
     for i in (13,14):
         old, new = source[i], template[i]
@@ -1231,8 +1230,8 @@ def check_preservation(src,dst,fix_accents):
     # Transformaciones estructurales aparte, nunca mezclar instalaciones de la plantilla.
     require(json_value(src[1][:26])==json_value(dst[1]),'E_PRESERVATION','Datos administrativos alterados')
     require(json_value(src[2][:21])==json_value(dst[2]),'E_PRESERVATION','Datos generales alterados')
-    for index in (7,8,9,10):
-        require(typed_value(src[index])==typed_value(dst[index]),'E_PRESERVATION','Bibliotecas, sombras o subgrupos alterados',f'blocks[{index}]')
+    for index in (7,8,9,10,12):
+        require(typed_value(src[index])==typed_value(dst[index]),'E_PRESERVATION','Bibliotecas, sombras, subgrupos o complementos alterados',f'blocks[{index}]')
     require(len(src[3][1])==len(dst[3][1]),'E_PRESERVATION','Numero de huecos alterado')
     for i in (0,2,3):
         require(json_value(src[3][i])==json_value(dst[3][i]),'E_PRESERVATION','Cerramientos, puentes o subgrupos alterados')

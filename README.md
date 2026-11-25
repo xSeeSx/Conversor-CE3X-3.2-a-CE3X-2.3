@@ -21,6 +21,7 @@ El original no se modifica. El resultado se guarda junto a él. La conversión s
 | Solar térmica **mensual** | Usa zona y litros del CEX. Adaptación experimental en mejoras que combinan envolvente conocida y ACS compatible |
 | Persianas nuevas | Opción experimental **Otros** para persianas manuales aisladas de cualquier color con factores válidos |
 | Autoconsumo eléctrico **mensual** | Opción experimental de aportación anual para series EPB reconocidas, sin mejoras asociadas |
+| Complementos (Isover, Ursa y otros) | Se conserva su bloque de datos, incluido texto y estructuras compuestas; revisar con el complemento instalado |
 | Depósitos de ACS | Conserva todos los campos nativos, incluidos vacíos, UA, método y multiplicador |
 | Aire primario, recuperadores y ventiladores | Bloqueados en residencial por falta de un campo equivalente en 2.3 |
 

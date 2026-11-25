@@ -346,15 +346,24 @@ class ConverterTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(c.ConversionError):
                 c.as_num(value, 'adaptacion')
 
-    def test_reset_addons_preserves_economics(self):
-        src=copy.deepcopy(self.src);src[6][0]=[['factura original',123]];src[12]={'Isover':'resultado viejo'}
-        code,plan=self.run_convert(source=src)
-        self.assertEqual(code,2,plan.summary)
-        self.assertEqual([x['element'] for x in plan.audit.losses],['Isover'])
-        code,run=self.accept(plan)
-        self.assertEqual(code,0,run.summary)
-        dst=c.read_cex(run.output)
-        self.assertEqual(dst[6],src[6]);self.assertEqual(dst[12],{})
+    def test_addons_preserve_nested_data_types_sharing_and_economics(self):
+        shared = [c.LegacyString('aislamiento'), '', None, True, 1.5]
+        self.src[12] = {'Isover':'resultado anterior',
+                        'Ursa':{'configuracion':shared, 'resultados':shared,
+                                'seleccion':(False,'',{'espesor':'0.08'})}}
+        self.src[6][0] = [['factura original',123]]
+        code, run = self.run_convert()
+        self.assertEqual(code, 0, run.summary)
+        dst = c.read_cex(run.output)
+        self.assertEqual(c.typed_value(dst[12]), c.typed_value(self.src[12]))
+        self.assertIs(dst[12]['Ursa']['configuracion'], dst[12]['Ursa']['resultados'])
+        self.assertEqual(dst[6], self.src[6])
+        self.assertFalse(any(x['path'].startswith('complementos.') for x in run.audit.losses))
+
+    def test_addon_new_classes_still_rejected_without_deleting_data(self):
+        self.src[12] = {'Ursa':c.CexObject(c.GlobalRef('nuevo32','ClaseExclusiva'))}
+        self.assertFailure('E_TARGET_CLASS')
+
     def test_truncated_file_diagnostic(self):
         self.source_path.write_bytes(c.encoded(self.src)[:300]);self.template_path.write_bytes(c.encoded(self.template))
         code,run=c.convert(self.source_path,self.template_path);self.assertEqual(code,1)
@@ -933,13 +942,13 @@ class ConverterTests(unittest.TestCase):
         system = self.src[4][5][0]
         system[9] = ['200', '200', '200']
         system[8][6] = '1'
-        self.src[12]['Icaen'] = 'Configuración que se perderá'
+        self.src[12]['Icaen'] = 'Configuración que se conserva'
         code, analysis = self.run_convert()
         self.assertEqual(code, 2, analysis.summary)
         before = c.sha(self.source_path)
         self.assertFalse(analysis.output.exists())
         expected = {'edificio.solar', 'administrativos[26]', 'generales[22]',
-                    'instalaciones[5][0][9]', 'complementos.Icaen'}
+                    'instalaciones[5][0][9]'}
         self.assertEqual({item['path'] for item in analysis.audit.losses}, expected)
         commands = [{'command':'convert','source':str(self.source_path),'template':str(self.template_path)},
                     {'command':'decision','id':analysis.manifest['pending_plan']['id'],'choice':'omit'}]

@@ -35,7 +35,7 @@ La matriz recoge las reglas y su evidencia. **E** indica transferencia directa c
 | 8. Biblioteca de cerramientos | `LibreriasCE3X.menuCerramientos.composicionCerramiento` | E / ? | N23 y R. Se conserva el bloque tipado. Quedan por contrastar catálogos 3.2 independientes de materiales, vidrios y marcos. |
 | 9 y 10. Sombras | Registros de polígonos y coeficientes y lista de nombres | E | O32, R y V. Conservación tipada y comprobación de referencias de huecos y cerramientos. [Fixture](../fuentes/fixtures/sombras_oficiales.json) |
 | 11. Informe | Selecciones de mejora, texto y fechas en los siete campos comunes | E / S | O32 y R. Se conserva informe vacío o nativo. Se retira el octavo campo vacío y se bloquea si está activo. |
-| 12. Complementos | Diccionario de entradas por nombre, caso `Icaen` observado | S / ? | O32 y R. Reinicio de entradas escalares con consentimiento. Estructuras compuestas se bloquean. |
+| 12. Complementos | Diccionario común con texto o datos compuestos, incluidos Isover y Ursa | E / ? | R (1.6.1). Conservación opaca del bloque, tipos y referencias. Las clases exclusivas sin regla se bloquean. Funcionamiento interno de cada complemento pendiente de comprobación nativa. |
 | 13 y 14. Reservados | Indicador 13 y token de 32 bytes en Base64 14 | ? | O32, N23 y R. Se conserva el 13 cuando coincide con la plantilla y se registra la sustitución del token con forma conocida. El significado interno sigue pendiente. |
 
 ## Cerramientos

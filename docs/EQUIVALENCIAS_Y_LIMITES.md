@@ -84,3 +84,16 @@ y pruebas sintéticas en `fuentes/test_converter.py`, incluida escritura y
 relectura de los tres métodos, todas las copias de instalaciones de mejora,
 costes y conservación del original. No se ha ensayado el recálculo nativo de
 un depósito incompleto: debe completarse si lo exige CE3X 2.3.
+
+
+## Bloque común de complementos (1.6.1)
+
+Se conserva el bloque 12 como datos opacos, sin exigir que las entradas sean
+escalares ni reiniciarlas. Un complemento como Ursa puede guardar listas,
+diccionarios y tuplas; esta forma no identifica por sí sola un elemento nuevo
+de 3.2. La comprobación de conservación y la relectura cubren el bloque completo,
+incluidos tipos STRING/UNICODE, referencias compartidas y datos vacíos. Las
+clases exclusivas sin regla siguen rechazándose por la validación de clases.
+La regresión sintética cubre texto Isover y datos compuestos Ursa sin publicar
+información particular. No se ha validado el funcionamiento interno de estos
+complementos en CE3X 2.3; conservar el bloque no acredita equivalencia de cálculos.
