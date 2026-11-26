@@ -51,6 +51,12 @@ La **v1.6.0** superó las pruebas automáticas y la integración Windows. Se han
 
 [Pruebas residenciales](docs/INFORME_VALIDACION_FINAL.md) · [Equivalencias y límites](docs/EQUIVALENCIAS_Y_LIMITES.md) · [Historial](CHANGELOG.md)
 
+## Más programas que te pueden interesar
+
+**[Ordenador de elementos CE3X](https://github.com/xSeeSx/Ordenador-de-elementos-CE3X)** - Reordena cerramientos, huecos y puentes térmicos en certificados residenciales 2.3 y 3.2, sin cambiar sus propiedades ni la versión del archivo. Interfaz con arrastre y deshacer.
+
+[Descargar ordenador de elementos](https://github.com/xSeeSx/Ordenador-de-elementos-CE3X/releases/latest)
+
 ## Si falla
 
 Pulsa **Guardar diagnóstico** y adjúntalo a una [incidencia en GitHub](https://github.com/xSeeSx/Conversor-CE3X-3.2-a-CE3X-2.3/issues), indicando qué ocurrió. **Revisa el ZIP antes de compartirlo**: puede contener datos del certificado.
